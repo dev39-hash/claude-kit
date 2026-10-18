@@ -1,0 +1,47 @@
+#ifndef {{NAME}}_CORE_EFFECTS_H
+#define {{NAME}}_CORE_EFFECTS_H
+
+#include <string>
+#include <variant>
+#include <vector>
+
+#include "ctrl_kernel/common_effects.h"
+#include "ctrl_kernel/ids.h"
+#include "{{name}}_core/events.h"
+
+/**
+ * @file effects.h
+ * @brief {{Name}} core: everything the core asks the outside world to do. The executor maps each
+ *        struct onto a runner call, a timer, a log line or a signal; the core never does any of
+ *        that itself (law L5).
+ */
+namespace {{ns}} {
+
+/// Connect the runner bound to `role`; the completion must echo `id` or be dropped as stale.
+struct RequestConnect {
+    Role role{Role::Device};
+    ctrl::AttemptId id;
+};
+struct RequestDisconnect {
+    Role role{Role::Device};
+};
+
+/// Run the job's stage; the completion (StageDone) must echo `id`.
+struct RequestWork {
+    ctrl::JobId id;
+};
+
+/// What the owning task and the UI are told.
+enum class TaskEvent { SetupFailed, Ready, Fault, JobResult, Stopped };
+struct Notify {
+    TaskEvent what{TaskEvent::Ready};
+    std::string message;
+};
+
+using Effect = std::variant<ctrl::PublishOutputs, ctrl::StartTimer, ctrl::CancelTimer, ctrl::Log,
+                            ctrl::Trace, RequestConnect, RequestDisconnect, RequestWork, Notify>;
+using Effects = std::vector<Effect>;
+
+} // namespace {{ns}}
+
+#endif // {{NAME}}_CORE_EFFECTS_H

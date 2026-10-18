@@ -1,0 +1,9 @@
+{
+  "_comment": "Merged into .claude/settings.json by install.js: read-only permissions for the pack tool. No hooks; the docs gate runs in the verification loop.",
+  "permissions": {
+    "allow": [
+      "Bash(node .claude/tools/docs-spec-driven/docs-gate.js:*)"
+    ]
+  },
+  "hooks": {}
+}

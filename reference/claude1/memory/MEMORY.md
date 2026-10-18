@@ -1,0 +1,4 @@
+- [User writes Vietnamese](user-language-vietnamese.md) - reply in Vietnamese, keep technical identifiers in English
+- [Repo conventions (feedback)](feedback-repo-conventions.md) - dev28 identity, no AI trailer, repo = user docs only, English+ASCII, .claude out of repo
+- [Lead role, agent models (feedback)](feedback-lead-role-and-models.md) - Claude leads and delegates; workers sonnet, reviewers opus
+- [Project goal and .claude layers](project-controller-kernel-goal.md) - reusable controller standard; layer A skills become a plugin later

@@ -1,0 +1,407 @@
+#include "{{name}}_core/{{name}}_core.h"
+
+#include <utility>
+
+// {{Name}} core: the pure decision core. The rules live in the design document; this file shows
+// where each one lives. No Qt, no runner, no clock: the core only edits m_s and returns effects.
+namespace {{ns}} {
+
+using ctrl::LogLevel;
+using ctrl::RoleHealth;
+
+// ---------------------------------------------------------------------------------------------
+// Names (wire names are frozen once released, law L12)
+// ---------------------------------------------------------------------------------------------
+
+const char *eventName(const Event &event)
+{
+    struct Visitor {
+        const char *operator()(const Setup &) const { return "Setup"; }
+        const char *operator()(const Stop &) const { return "Stop"; }
+        const char *operator()(const StartRequested &) const { return "StartRequested"; }
+        const char *operator()(const AckRise &) const { return "AckRise"; }
+        const char *operator()(const RoleStatus &) const { return "RoleStatus"; }
+        const char *operator()(const StageDone &) const { return "StageDone"; }
+        const char *operator()(const Timer &) const { return "Timer"; }
+    };
+    return std::visit(Visitor{}, event);
+}
+
+const char *displayName(DisplayState s)
+{
+    switch (s) {
+    case DisplayState::NotReady: return "NotReady";
+    case DisplayState::Ready: return "Ready";
+    case DisplayState::Running: return "Running";
+    case DisplayState::Faulted: return "Faulted";
+    }
+    return "Unknown";
+}
+
+const char *reasonName(NotReadyReason r)
+{
+    switch (r) {
+    case NotReadyReason::NotLive: return "NotLive";
+    case NotReadyReason::DeviceDown: return "DeviceDown";
+    case NotReadyReason::FaultLatched: return "FaultLatched";
+    case NotReadyReason::JobBusy: return "JobBusy";
+    }
+    return "Unknown";
+}
+
+const char *roleName(Role r)
+{
+    switch (r) {
+    case Role::Device: return "device";
+    }
+    return "unknown";
+}
+
+const char *faultName(FaultCode c)
+{
+    switch (c) {
+    case FaultCode::None: return "None";
+    case FaultCode::DeviceLost: return "DeviceLost";
+    case FaultCode::WorkFailed: return "WorkFailed";
+    case FaultCode::WorkTimeout: return "WorkTimeout";
+    }
+    return "Unknown";
+}
+
+// ---------------------------------------------------------------------------------------------
+// Construction and the single entry point
+// ---------------------------------------------------------------------------------------------
+
+{{Name}}Core::{{Name}}Core(Policy policy)
+    : m_p(std::move(policy))
+{
+}
+
+Effects {{Name}}Core::step(const Event &event)
+{
+    Effects fx;
+    const DisplayState before = display();
+    const bool readyBefore = readiness().ok();
+    std::visit([this, &fx](const auto &e) { on(e, fx); }, event);
+    finish(eventName(event), before, readyBefore, fx);
+    return fx;
+}
+
+// Runs at the end of every step: one Trace per display change, one Notify per readiness edge,
+// one PublishOutputs per output change. Handlers never publish on their own (law L7).
+void {{Name}}Core::finish(const char *event, DisplayState before, bool readyBefore, Effects &fx)
+{
+    const DisplayState after = display();
+    if (after != before) {
+        trace(event, "", before, fx);
+    }
+    if (readiness().ok() && !readyBefore) {
+        notify(TaskEvent::Ready, "Controller ready.", fx);
+    }
+    const ctrl::OutputImage image = outputs();
+    if (!m_hasPublished || image != m_lastImage) {
+        m_lastImage = image;
+        m_hasPublished = true;
+        fx.push_back(ctrl::PublishOutputs{image});
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Derived queries (laws L7, L12): everything the master sees is computed from State
+// ---------------------------------------------------------------------------------------------
+
+{{Name}}Core::Readiness {{Name}}Core::readiness() const
+{
+    Readiness r;
+    const State &s = m_s;
+    // One if per reason, in the documented order; no "unless" branches.
+    if (!s.lifecycle.isLive()) r.add(NotReadyReason::NotLive);
+    if (!s.role(Role::Device).isConnected()) r.add(NotReadyReason::DeviceDown);
+    if (s.fault.isLatched()) r.add(NotReadyReason::FaultLatched);
+    if (!s.job.isIdle()) r.add(NotReadyReason::JobBusy);
+    return r;
+}
+
+ctrl::OutputImage {{Name}}Core::outputs() const
+{
+    ctrl::OutputImage img;
+    const State &s = m_s;
+    // One expression per output name; this table is the output contract.
+    img.set("bReady", readiness().ok());
+    img.set("bBusy", jobInFlight());
+    img.set("bFault", s.fault.isLatched());
+    img.set("nFaultCode", static_cast<int>(s.fault.latched.value_or(FaultCode::None)));
+    img.set("bLastOk", s.lastResult.valid && s.lastResult.ok);
+    return img;
+}
+
+DisplayState {{Name}}Core::display() const
+{
+    // Fixed precedence: busy, faulted, ready, not ready.
+    if (jobInFlight()) return DisplayState::Running;
+    if (m_s.fault.isLatched()) return DisplayState::Faulted;
+    return readiness().ok() ? DisplayState::Ready : DisplayState::NotReady;
+}
+
+bool {{Name}}Core::jobInFlight() const
+{
+    return m_s.job.phase == Phase::Working;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Lifecycle
+// ---------------------------------------------------------------------------------------------
+
+void {{Name}}Core::on(const Setup &, Effects &fx)
+{
+    if (m_s.lifecycle.kind != ctrl::Lifecycle::Kind::Idle) {
+        log(LogLevel::Warn, "Setup ignored: the controller is already started.", fx);
+        return;
+    }
+    // A fresh session. Ids and timer tokens stay monotonic: State is not replaced wholesale.
+    m_s.fault.clear();
+    m_s.lastResult = JobResult{};
+    RoleHealth &dev = m_s.role(Role::Device);
+    dev.clearOutage();
+    dev.kind = RoleHealth::Kind::Unknown;
+    dev.epoch.next();   // the adapter binds the role at setup and stamps this generation
+
+    m_s.lifecycle.kind = ctrl::Lifecycle::Kind::Starting;
+    fx.push_back(RequestConnect{Role::Device, dev.beginAttempt()});
+    arm(TimerKey::StartDeadline, -1, m_p.startDeadlineMs, fx);
+    log(LogLevel::Info, "Setup accepted. Waiting for the device.", fx);
+}
+
+void {{Name}}Core::enterLive(Effects &fx)
+{
+    m_s.lifecycle.kind = ctrl::Lifecycle::Kind::Live;
+    disarm(TimerKey::StartDeadline, -1, fx);
+}
+
+void {{Name}}Core::on(const Stop &, Effects &fx)
+{
+    const ctrl::Lifecycle::Kind kind = m_s.lifecycle.kind;
+    if (kind == ctrl::Lifecycle::Kind::Idle || kind == ctrl::Lifecycle::Kind::Stopping) {
+        log(LogLevel::Dev, "Stop ignored: already idle or stopping.", fx);
+        return;
+    }
+    m_s.lifecycle.kind = ctrl::Lifecycle::Kind::Stopping;
+    disarmAllTimers(fx);
+    m_s.job.end();   // bumps the id: the late completion of the abandoned job is stale
+    fx.push_back(RequestDisconnect{Role::Device});
+    if (!m_s.role(Role::Device).isConnected()) {
+        finishStop(fx);
+    } else {
+        arm(TimerKey::StopDeadline, -1, m_p.stopDeadlineMs, fx);   // never an unbounded wait (L10)
+    }
+}
+
+void {{Name}}Core::finishStop(Effects &fx)
+{
+    disarmAllTimers(fx);
+    m_s.lifecycle.kind = ctrl::Lifecycle::Kind::Idle;
+    notify(TaskEvent::Stopped, "Controller stopped.", fx);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Master inputs
+// ---------------------------------------------------------------------------------------------
+
+void {{Name}}Core::on(const StartRequested &, Effects &fx)
+{
+    const Readiness r = readiness();
+    if (!r.ok()) {
+        log(LogLevel::Warn, "Start ignored: " + r.describe(reasonName), fx);
+        return;
+    }
+    startJob(fx);
+}
+
+void {{Name}}Core::on(const AckRise &, Effects &fx)
+{
+    if (!m_s.fault.isLatched()) {
+        log(LogLevel::Dev, "Acknowledge with no fault latched; nothing to clear.", fx);
+        return;
+    }
+    m_s.fault.clear();
+    log(LogLevel::Info, "Fault acknowledged.", fx);
+}
+
+// ---------------------------------------------------------------------------------------------
+// The job
+// ---------------------------------------------------------------------------------------------
+
+void {{Name}}Core::startJob(Effects &fx)
+{
+    m_s.job.begin(Phase::Working);   // new id
+    m_s.lastResult = JobResult{};
+    fx.push_back(RequestWork{m_s.job.id});
+    arm(TimerKey::WorkDeadline, -1, m_p.workDeadlineMs, fx);
+    log(LogLevel::Info, "Job started.", fx);
+}
+
+void {{Name}}Core::on(const StageDone &e, Effects &fx)
+{
+    if (!m_s.job.accepts(e.id, Phase::Working)) {
+        trace("StageDone", "stale", display(), fx);   // law L3: a Trace and no State change
+        return;
+    }
+    disarm(TimerKey::WorkDeadline, -1, fx);
+    if (!e.ok) {
+        abortJob(FaultCode::WorkFailed, "The device reported the job failed.", fx);
+        return;
+    }
+    m_s.lastResult = JobResult{true, true};
+    m_s.job.end();
+    notify(TaskEvent::JobResult, "Job finished.", fx);
+}
+
+void {{Name}}Core::abortJob(FaultCode code, const std::string &why, Effects &fx)
+{
+    disarm(TimerKey::WorkDeadline, -1, fx);
+    m_s.job.end();   // bumps the id: the late completion of this run is now stale
+    m_s.lastResult = JobResult{true, false};
+    raiseFault(code, why, fx);
+    notify(TaskEvent::JobResult, why, fx);
+}
+
+void {{Name}}Core::raiseFault(FaultCode code, const std::string &why, Effects &fx)
+{
+    if (m_s.fault.raise(code, m_s.job.id.value)) {   // first raise wins
+        log(LogLevel::Error, why + " fault=" + faultName(code), fx);
+        notify(TaskEvent::Fault, why, fx);
+    } else {
+        log(LogLevel::Warn, "Fault " + std::string(faultName(code)) + " not published: another fault is latched.", fx);
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Role health. One role, no counting: a real controller adds reconnect attempts here with
+// RoleHealth + RolePolicy (attempts, intervals, deadlines) instead of a hand-written counter.
+// ---------------------------------------------------------------------------------------------
+
+FaultCode {{Name}}Core::lossCode(Role r) const
+{
+    return static_cast<FaultCode>(m_p.role(r).faultCode);
+}
+
+void {{Name}}Core::on(const RoleStatus &e, Effects &fx)
+{
+    RoleHealth &h = m_s.role(e.role);
+    if (e.epoch.value < h.epoch.value) {
+        trace("RoleStatus", "stale", display(), fx);   // a status from a binding we left
+        return;
+    }
+    h.epoch = e.epoch;
+    log(LogLevel::Dev, std::string("role=") + roleName(e.role) + " status=" + std::to_string(static_cast<int>(e.status)), fx);
+
+    const bool connected = e.status == ConnectStatus::Connected;
+    if (m_s.lifecycle.kind == ctrl::Lifecycle::Kind::Stopping) {
+        h.kind = connected ? RoleHealth::Kind::Connected : RoleHealth::Kind::Deliberate;
+        if (!connected) {
+            finishStop(fx);
+        }
+        return;
+    }
+    if (connected) {
+        h.kind = RoleHealth::Kind::Connected;
+        h.clearOutage();
+        if (m_s.lifecycle.kind == ctrl::Lifecycle::Kind::Starting) {
+            enterLive(fx);
+        }
+        return;
+    }
+    onDeviceDown(e.role, e.status, fx);
+}
+
+void {{Name}}Core::onDeviceDown(Role role, ConnectStatus status, Effects &fx)
+{
+    RoleHealth &h = m_s.role(role);
+    const bool deliberate = status == ConnectStatus::Disconnected;
+    h.kind = deliberate ? RoleHealth::Kind::Deliberate : RoleHealth::Kind::Lost;
+    if (jobInFlight()) {
+        abortJob(lossCode(role), std::string(roleName(role)) + " went down during the job.", fx);
+    } else if (!deliberate && m_s.lifecycle.isLive()) {
+        raiseFault(lossCode(role), std::string(roleName(role)) + " lost.", fx);
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Timers (law L4): slots with tokens in State; a stale token is a Trace and nothing else
+// ---------------------------------------------------------------------------------------------
+
+void {{Name}}Core::arm(TimerKey key, int role, int ms, Effects &fx)
+{
+    const ctrl::TimerToken token = m_s.timers.arm({static_cast<int>(key), role});
+    fx.push_back(ctrl::StartTimer{static_cast<int>(key), role, ms, token});
+}
+
+void {{Name}}Core::disarm(TimerKey key, int role, Effects &fx)
+{
+    m_s.timers.disarm({static_cast<int>(key), role});
+    fx.push_back(ctrl::CancelTimer{static_cast<int>(key), role});
+}
+
+void {{Name}}Core::disarmAllTimers(Effects &fx)
+{
+    for (auto &kv : m_s.timers.slots) {
+        if (kv.second.armed) {
+            kv.second.armed = false;
+            fx.push_back(ctrl::CancelTimer{kv.first.first, kv.first.second});
+        }
+    }
+}
+
+void {{Name}}Core::on(const Timer &e, Effects &fx)
+{
+    if (!m_s.timers.isCurrent({static_cast<int>(e.key), e.role}, e.token)) {
+        trace("Timer", "stale", display(), fx);
+        return;
+    }
+    m_s.timers.disarm({static_cast<int>(e.key), e.role});
+    switch (e.key) {
+    case TimerKey::StartDeadline:
+        if (m_s.lifecycle.kind == ctrl::Lifecycle::Kind::Starting) {
+            m_s.lifecycle.kind = ctrl::Lifecycle::Kind::Idle;
+            log(LogLevel::Warn, "The device did not connect in time; setup abandoned.", fx);
+            notify(TaskEvent::SetupFailed, "Controller setup failed.", fx);
+            return;
+        }
+        break;
+    case TimerKey::StopDeadline:
+        if (m_s.lifecycle.kind == ctrl::Lifecycle::Kind::Stopping) {
+            log(LogLevel::Warn, "Stop deadline reached with the device still connected; stopping anyway.", fx);
+            finishStop(fx);
+            return;
+        }
+        break;
+    case TimerKey::WorkDeadline:
+        if (jobInFlight()) {
+            abortJob(FaultCode::WorkTimeout, "The device did not answer the job in time.", fx);
+            return;
+        }
+        break;
+    }
+    log(LogLevel::Dev, "Timer ignored: nothing was waiting on it.", fx);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Effect helpers
+// ---------------------------------------------------------------------------------------------
+
+void {{Name}}Core::log(LogLevel level, std::string message, Effects &fx) const
+{
+    fx.push_back(ctrl::Log{level, std::move(message)});
+}
+
+void {{Name}}Core::notify(TaskEvent what, std::string message, Effects &fx) const
+{
+    fx.push_back(Notify{what, std::move(message)});
+}
+
+void {{Name}}Core::trace(const char *event, const char *note, DisplayState from, Effects &fx) const
+{
+    fx.push_back(ctrl::Trace{displayName(from), displayName(display()), event, note, m_s.job.id.value});
+}
+
+} // namespace {{ns}}

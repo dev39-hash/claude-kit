@@ -1,0 +1,12 @@
+{
+  "_comment": "Merged into .claude/settings.json by install.js: read-only permissions used by the QtTest and qmake procedures.",
+  "permissions": {
+    "allow": [
+      "Bash(tasklist:*)",
+      "PowerShell(Get-Process:*)",
+      "Bash(qmake -v:*)",
+      "Bash(qmake --version:*)"
+    ]
+  },
+  "hooks": {}
+}

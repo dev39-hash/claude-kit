@@ -1,0 +1,570 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "claude-kit/kit.config.schema.json",
+  "title": "claude-kit project configuration",
+  "description": "Every project-specific value the kit's rules, hooks, agents and skills read. Lives at <project>/.claude/kit.config.json. Hooks read it through core/hooks/lib/config.js; defaults below apply when a key is absent.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "project",
+    "git"
+  ],
+  "properties": {
+    "kitVersion": {
+      "type": "string",
+      "description": "Version of the kit this config was generated for; install.js --update compares it.",
+      "default": "0.1.0"
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Short project name used in generated headings.",
+          "default": ""
+        },
+        "description": {
+          "type": "string",
+          "description": "One line: what the project is.",
+          "default": ""
+        },
+        "root": {
+          "type": "string",
+          "description": "Project root. Keep the default so hooks resolve it from the environment; never hard-code a machine path.",
+          "default": "$CLAUDE_PROJECT_DIR"
+        },
+        "leadTitle": {
+          "type": "string",
+          "description": "How the human is addressed in task files, plans and replies.",
+          "default": "Project Leader"
+        },
+        "replyLanguage": {
+          "type": "string",
+          "description": "Language of conversation with the human (BCP 47 tag).",
+          "default": "vi"
+        },
+        "artifactLanguage": {
+          "type": "string",
+          "description": "Language of code, comments, commits and repository docs.",
+          "default": "en"
+        }
+      }
+    },
+    "models": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "worker": {
+          "type": "string",
+          "description": "Model for implementer, tester, build-resolver, explorer, Explore, Plan, general-purpose.",
+          "default": "sonnet"
+        },
+        "reviewer": {
+          "type": "string",
+          "description": "Model for the reviewer agent and any ad-hoc review.",
+          "default": "opus"
+        },
+        "forceAll": {
+          "type": "boolean",
+          "description": "When true every sub agent, reviewer included, must use models.worker (the subagent-model-guard hook enforces it).",
+          "default": false
+        },
+        "allowFork": {
+          "type": "boolean",
+          "description": "Allow subagent_type fork. Off by default: a fork carries the leader's context and model.",
+          "default": false
+        }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Who approves each gate by default. 'human' is the core default; 'leader' records a standing delegation that project/rules.md must explain and scope.",
+      "properties": {
+        "plan": {
+          "type": "string",
+          "enum": [
+            "human",
+            "leader"
+          ],
+          "default": "human"
+        },
+        "commit": {
+          "type": "string",
+          "enum": [
+            "human",
+            "leader"
+          ],
+          "default": "human"
+        }
+      }
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identity"
+      ],
+      "properties": {
+        "identity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "email"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Exact user.name the repo-local config must hold.",
+              "default": ""
+            },
+            "email": {
+              "type": "string",
+              "description": "Exact user.email the repo-local config must hold.",
+              "default": ""
+            }
+          }
+        },
+        "deniedEmails": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Addresses that must never appear as author or committer (for example a personal account).",
+          "default": []
+        },
+        "aiAttribution": {
+          "type": "string",
+          "enum": [
+            "deny"
+          ],
+          "description": "Only 'deny' exists: no Co-Authored-By, no 'Generated with', no tool or model name in commits, tags, merges or PR bodies.",
+          "default": "deny"
+        },
+        "forbiddenPhrases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Case-insensitive substrings denied in commit messages and PR bodies, in addition to the built-in attribution patterns.",
+          "default": []
+        },
+        "conventionalCommits": {
+          "type": "boolean",
+          "default": true
+        },
+        "commitCadence": {
+          "type": "string",
+          "enum": [
+            "task",
+            "phase",
+            "wp"
+          ],
+          "description": "task: one commit per closed task (core default). phase: the leader batches several tasks. wp: work-package pack, implementer commits on its own branch.",
+          "default": "task"
+        },
+        "whoCommits": {
+          "type": "string",
+          "enum": [
+            "leader",
+            "implementer-branch"
+          ],
+          "default": "leader"
+        },
+        "push": {
+          "type": "string",
+          "enum": [
+            "ask",
+            "deny"
+          ],
+          "description": "ask: every push asks the human. deny: local-only repository, push and remote changes are blocked.",
+          "default": "ask"
+        },
+        "forcePush": {
+          "type": "string",
+          "enum": [
+            "ask-with-lease",
+            "deny"
+          ],
+          "description": "ask-with-lease: --force-with-lease asks, plain --force and +refspec are denied. deny: all force pushes denied.",
+          "default": "ask-with-lease"
+        },
+        "integrationBranch": {
+          "type": "string",
+          "default": "main"
+        },
+        "branchPattern": {
+          "type": "string",
+          "description": "Branch name pattern when whoCommits is implementer-branch, with {id} and {slug} placeholders.",
+          "default": "task/{id}-{slug}"
+        },
+        "gitExe": {
+          "type": "string",
+          "description": "Full path to git when it is not on PATH (portable git). Empty means 'git'.",
+          "default": ""
+        }
+      }
+    },
+    "paths": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "All paths are relative to project.root unless absolute. Pattern forms: \"dir/\" = the directory and everything below; \"a/b.txt\" = exactly that path (a directory named this way is protected itself, not its children); \"*.ts\" = glob on the basename or the first path segment; \"docs/*.md\" = glob on the whole relative path.",
+      "properties": {
+        "readOnly": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Never edited, deleted, moved into or written over by any mechanism (reference extracts, vendored drops).",
+          "default": []
+        },
+        "askBeforeEdit": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Edits ask the human first (third-party trees).",
+          "default": []
+        },
+        "localOnly": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Untracked data git cannot restore; deletes ask first.",
+          "default": [
+            ".claude/"
+          ]
+        },
+        "protectedDelete": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Never deleted, not even by the task: .git/, the .claude folder itself (its docs, tasks and scratch may be cleaned), the kit files and the memory mirror. Hook files and settings are protected from shell writes as well.",
+          "default": [
+            ".git/",
+            ".claude",
+            ".claude/memory/",
+            ".claude/core/",
+            ".claude/packs/",
+            ".claude/hooks/",
+            ".claude/settings.json",
+            ".claude/kit.config.json"
+          ]
+        },
+        "forbiddenTreeFiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "File names that must not exist in the repo tree outside .claude/.",
+          "default": [
+            "CLAUDE.md",
+            "AGENTS.md",
+            "AGENT.md"
+          ]
+        },
+        "memoryMirror": {
+          "type": "string",
+          "default": ".claude/memory"
+        },
+        "docs": {
+          "type": "string",
+          "default": ".claude/docs"
+        },
+        "tasks": {
+          "type": "string",
+          "default": ".claude/tasks"
+        },
+        "scratch": {
+          "type": "string",
+          "description": "Project-local scratch folder agents may use and clean freely (in addition to the session scratchpad).",
+          "default": ".claude/scratch"
+        },
+        "tempRoots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Extra directories outside the project where Claude's own temp files may be deleted without asking. The session scratchpad and the Claude temp folder are always allowed.",
+          "default": []
+        },
+        "docsGateRoots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Tracked documentation roots checked for forbidden vocabulary (.claude, agent, AI, plan, phase, owner, absolute paths).",
+          "default": [
+            "README.md",
+            "docs/"
+          ]
+        }
+      }
+    },
+    "processes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "neverKill": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Process names (without .exe) that are never killed, by name or by PID.",
+          "default": []
+        },
+        "neverLaunch": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Process names that are never started by an agent.",
+          "default": []
+        },
+        "busyBeforeTests": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "If any of these is running, a test suite must wait.",
+          "default": [
+            "cl",
+            "link",
+            "nmake",
+            "jom",
+            "ninja",
+            "msbuild"
+          ]
+        },
+        "testPorts": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "Fixed ports test suites bind; suites sharing one run in sequence.",
+          "default": []
+        }
+      }
+    },
+    "encoding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "asciiExtensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Files with these extensions must be pure ASCII, comments included (the guard-edit hook rejects non-ASCII writes).",
+          "default": [
+            ".cpp",
+            ".cc",
+            ".cxx",
+            ".h",
+            ".hpp",
+            ".hh",
+            ".inl",
+            ".ipp",
+            ".ui",
+            ".qrc",
+            ".qss",
+            ".pro",
+            ".pri",
+            ".prf",
+            ".cmake",
+            "CMakeLists.txt",
+            ".bat",
+            ".cmd",
+            ".ps1",
+            ".py",
+            ".js",
+            ".json"
+          ]
+        },
+        "asciiExempt": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Path globs exempt from the ASCII rule (vendored code, translation files).",
+          "default": [
+            "*.ts",
+            "3rdparty/",
+            "components/",
+            "_deps/",
+            "third_party/"
+          ]
+        },
+        "asciiRepoMarkdown": {
+          "type": "boolean",
+          "description": "Also require ASCII in tracked README.md and docs/ markdown (the docs gate checks it). Markdown under .claude/ is always exempt.",
+          "default": true
+        },
+        "codePage": {
+          "type": "string",
+          "description": "The machine's ANSI code page when it is not UTF-8 (for example cp932); enables the PowerShell source-write guard.",
+          "default": ""
+        }
+      }
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "isolation": {
+          "type": "string",
+          "enum": [
+            "slots",
+            "worktrees",
+            "none"
+          ],
+          "description": "How parallel agents isolate builds. slots: build-wt/slotN directories sharing one source tree. worktrees: git worktrees. none: implementers run in sequence.",
+          "default": "slots"
+        },
+        "slots": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "dir": {
+              "type": "string",
+              "default": "build-wt"
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 8
+            },
+            "staleHours": {
+              "type": "number",
+              "minimum": 0,
+              "default": 3
+            }
+          }
+        },
+        "worktrees": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "dir": {
+              "type": "string",
+              "default": ".wt"
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 4
+            },
+            "prepareCommand": {
+              "type": "string",
+              "default": ""
+            }
+          }
+        },
+        "leadBuildDir": {
+          "type": "string",
+          "description": "The leader's own verification tree.",
+          "default": "build"
+        },
+        "buildDirPatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Directory globs that format and gate hooks skip.",
+          "default": [
+            "build/",
+            "build-*",
+            "out/",
+            "_deps/",
+            "third_party/",
+            ".vs/",
+            ".idea/",
+            "node_modules/"
+          ]
+        },
+        "toolchain": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Free-form machine facts the packs read (vsRoot, vcvars, arch, qtDir, cmakeExe, clangFormatExe, jomExe, generator ...). Mirror them in project/build-env.md for humans.",
+          "default": {}
+        },
+        "formatOnEdit": {
+          "type": "string",
+          "enum": [
+            "if-config-present",
+            "never"
+          ],
+          "description": "if-config-present: run the formatter on an edited file only when the repo has a formatter config (.clang-format). never: keep the file's own style.",
+          "default": "if-config-present"
+        },
+        "warningsAsErrors": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "hooks": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "runtime": {
+          "type": "string",
+          "enum": [
+            "node",
+            "powershell"
+          ],
+          "description": "node is the kit standard. powershell selects the minimal hooks-powershell pack for machines without Node.",
+          "default": "node"
+        },
+        "failMode": {
+          "type": "string",
+          "enum": [
+            "open",
+            "closed"
+          ],
+          "description": "Safety guards fail open (allow + stderr note) on their own errors. The model guard always fails closed.",
+          "default": "open"
+        },
+        "timeoutSeconds": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "guard": {
+              "type": "integer",
+              "default": 10
+            },
+            "format": {
+              "type": "integer",
+              "default": 30
+            },
+            "stop": {
+              "type": "integer",
+              "default": 15
+            }
+          }
+        }
+      }
+    },
+    "packs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Enabled packs, by folder name under packs/. install.js activates their rules, agents, skills, commands and hooks.",
+      "default": []
+    },
+    "packConfig": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Per-pack settings keyed by pack name (for example cpp-cmake-gtest.goldenDir, cpp-qmake-qt.umbrellaPro, work-package.wpDir). Each pack documents its keys in its README.",
+      "default": {}
+    }
+  }
+}

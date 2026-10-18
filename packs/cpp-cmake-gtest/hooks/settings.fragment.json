@@ -1,0 +1,13 @@
+{
+  "_comment": "Merged into .claude/settings.json by install.js: read-only permissions for the pack tools. {{pack}} in a hook command expands to $CLAUDE_PROJECT_DIR/.claude/hooks/<pack>.",
+  "permissions": {
+    "allow": [
+      "Bash(node .claude/tools/cpp-cmake-gtest/build.js:*)",
+      "Bash(node .claude/tools/cpp-cmake-gtest/wt-slot.js:*)",
+      "Bash(ctest -N:*)",
+      "Bash(ctest --test-dir:*)",
+      "Bash(cmake --build:*)"
+    ]
+  },
+  "hooks": {}
+}

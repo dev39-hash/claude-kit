@@ -1,0 +1,6 @@
+- [Ask before reading outside project](ask-before-reading-outside-project.md) — any read outside C:\DGB\Project\mc_protocol needs the user's yes first
+- [Memory dual-copy sync](memory-dual-copy-sync.md) — every memory change goes to both Claude memory dir and project .claude/memory
+- [HIL capture state](hil-capture-prerequisites-open.md) — prerequisites decided 2026-10-04; owner runs the captures; Phase 9 waits until they are done
+- [Commit identity, no AI trailer](git-commit-identity-no-ai-trailer.md) — commits as dev28 <devgbit@gmail.com>; no Co-Authored-By / AI attribution in any commit or PR
+- [Agent team workflow in use](agent-team-system-staged.md) — in daily use (T-001…T-077); at every commit update plan.md + todo.md (+ project-context at phase ends)
+- [Fresh subagent per task](fresh-subagent-per-task-when-context-heavy.md) — next task gets a new subagent; resume only for the current task's rework

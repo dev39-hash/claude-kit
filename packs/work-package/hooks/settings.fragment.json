@@ -1,0 +1,21 @@
+{
+  "_comment": "Merged into .claude/settings.json by install.js. {{pack}} expands to $CLAUDE_PROJECT_DIR/.claude/hooks/work-package.",
+  "permissions": {
+    "allow": [
+      "Bash(git worktree list:*)",
+      "Bash(git bundle verify:*)",
+      "Bash(git merge-base:*)",
+      "Bash(sha256sum:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          { "type": "command", "command": "node \"{{pack}}/wt-guard.js\"", "timeout": 10 }
+        ]
+      }
+    ]
+  }
+}

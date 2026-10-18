@@ -1,0 +1,6 @@
+- [Image matching library goal](project-image-matching-library-goal.md) - reference_source is a read-only, untracked extract from a Qt robot app; new lib is pure OpenCV C++ with CMake; config in .claude/CLAUDE.md
+- [v0.1.0 scope and plan](project-v0-1-0-scope.md) - two modes (edge-based port + correlation), two-phase OK/NG conditions, clearance zones edge-only, no picking vocabulary; plan rev 3 and ADRs 0003-0005 proposed
+- [Lead role, agent models (feedback)](feedback-lead-role-and-sonnet-subagents.md) - Claude leads and delegates; workers sonnet, reviewers opus, at every depth
+- [Repo conventions (feedback)](feedback-repo-conventions.md) - single identity dev28, no AI trailers or owner/role mentions in commits, English-only code and docs, README.md only, ASCII-only sources, reference_source/.claude/ADRs out of the repo, memory mirrored to .claude/memory, deletions only inside the project folder or own temp files
+- [User writes Vietnamese](user-language-vietnamese.md) - reply in Vietnamese, keep technical identifiers in English
+- [Preview versions (feedback)](feedback-preview-versions.md) - after library changes save annotated previews + per-version README under build-preview/

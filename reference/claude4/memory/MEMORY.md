@@ -1,0 +1,26 @@
+# Memory Index
+
+- [User role](user-role.md) — Project Leader of NichirinLaserMark, technical, writes Vietnamese
+- [Call them Project Leader](project-leader-term.md) — never "the owner" for the person; technical "owner" (owner window/HWND, QObject/widget owner) stays
+- [Working arrangement](working-arrangement.md) — since 2026-10-09 I orchestrate implementer/reviewer/tester sub agents (sonnet), code myself only when needed; I verify + commit
+- [Project status](project-status.md) — Qt5.15/MSVC2019/32-bit PLC↔laser bridge; phases 1–17 all closed (14 by owner decision 2026-10-07); close-outs must BUILD every test project
+- [No UI screenshots](no-ui-screenshots.md) — user checks UI themselves; don't screenshot to verify
+- [Offscreen UI probe](ui-offscreen-probe.md) — how to actually measure Qt widget behaviour here instead of reasoning about it
+- [Laser init real mode](laser-init-realmode.md) — rc=5 HARDVER = init in test/sim mode with a real board; drive board in real mode (testMode=false), NOT a firmware version mismatch
+- [EzD SDK docs](ezd-sdk-docs.md) — MarkEzd rc table + API reference live in components/ezdlib; read them instead of guessing rc meanings
+- [MC computer-link frames](mc-computer-link-frames.md) — 1C/3C sum-check ranges, which responses omit it, and the fields that fail silently (confirmed on a real PLC)
+- [DialogDismisser trap](dialog-dismisser-trap.md) — keep it short-scoped; process-wide it aborted the SDK's homing dialog and caused the low-power bug
+- [Bundled EzCad config drifts](ezcad-config-drift.md) — components/ezcad vs the run folder; a stale copy makes hardware tests measure a different machine
+- [Build laser_host gotchas](build-laser-host-gotchas.md) — incremental 32-bit build of laser_host.exe; vcvars `&&` PATH pre-expansion trap + benign vswhere warning
+- [Local git repo](git-local-repo.md) — since 2026-10-07: portable git path, identity dev27 <de27@local>, no AI trailer, never push, autocrlf=false; ASK "new commit or fold into root?" each time
+- [PowerShell vs UTF-8 sources](powershell-utf8-source-files.md) — never Get-Content/Set-Content a source file here (CP932 mangles UTF-8 comments, no git to revert)
+- [QR schema is data — but persisted](qr-schema-is-data.md) — a new resource JSON does NOT reach a machine that already saved a schema
+- [JA translation: measure, don't reason](ja-installed-terms.md) — the shipped Japanese decides the term, not merit; quote app messages from the .ts
+- [ECC local harness](ecc-local-harness.md) — Qt-adapted ECC subset in .claude/ (local-only), no Node; guard-shell.ps1 hook blocks git push + PS writes to sources
+- [Memory backup sync](memory-backup-sync.md) — mirror EVERY memory change to <repo>/.claude/memory; hook covers Write/Edit, deletes/renames by hand
+- [No deletes outside root](no-delete-outside-root.md) — never delete anything outside C:\DGB\Project\NichirinLaserMark (temp + memory folder included) without an explicit owner yes
+- [Docs restructure](docs-restructure.md) — spec-driven docs/spec, requests untracked + purged, no plan phases outside docs/history, comments cite tracked content only
+- [Sub agent default model](subagent-default-model.md) — every sub agent, every level: model sonnet (Sonnet 5.5) unless the owner names another
+- [No Unicode symbols in code](no-unicode-symbols-in-code.md) — ASCII-only code (no — § ─ →); rule + git grep check in build_and_verification "Source encoding"; .ts translations exempt
+- [UI tests: loop in Release](ui-test-release-loops.md) — run widget tests 25-40x on Release; a qpb Remove use-after-free passed 4/4 + Debug, crashed 30-50% in loops
+- [QSS token theming](qss-token-theming.md) — ThemeManager `@{token}` system; global qss = tokens + class selectors only (no #objectName/hex); per-widget qss in qrc; register ui files in ui.pri
