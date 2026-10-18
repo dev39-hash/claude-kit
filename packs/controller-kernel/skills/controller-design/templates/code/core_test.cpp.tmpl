@@ -1,0 +1,276 @@
+// {{Name}} core tests: table rows driven through a Harness that runs the invariant checker after
+// every step, one stale-completion probe, and the completeness sweep. No Qt, no threads, no
+// timers. KT_TEST, KT_CHECK and completenessSweep come from the kernel test kit
+// (kernel_test_support.h); the Harness and checkInvariants() below are this controller's own.
+// Keep exactly one main() per test executable: delete the one at the bottom if the project's
+// test runner already has it.
+
+#include <cstdio>
+#include <functional>
+#include <string>
+#include <utility>
+#include <variant>
+#include <vector>
+
+#include "kernel_test_support.h"
+#include "{{name}}_core/{{name}}_core.h"
+
+using namespace {{ns}};
+using ctrl::Epoch;
+using ctrl::JobId;
+using ctrl::OutputImage;
+using ctrl::TimerToken;
+
+namespace {
+
+// ---------------------------------------------------------------------------------------------
+// Harness around one core: records effects, tracks timer tokens like an executor would, and runs
+// the invariant checker after every step.
+// ---------------------------------------------------------------------------------------------
+
+struct Harness {
+    {{Name}}Core core;
+    Effects last;
+    std::vector<Effects> history;
+
+    explicit Harness(Policy p = Policy::defaults()) : core(std::move(p)) {}
+
+    const State &s() const { return core.state(); }
+
+    Effects step(const Event &ev)
+    {
+        last = core.step(ev);
+        history.push_back(last);
+        checkInvariants();
+        return last;
+    }
+
+    template <class T>
+    int countLast() const
+    {
+        int n = 0;
+        for (const Effect &e : last) {
+            if (std::holds_alternative<T>(e)) ++n;
+        }
+        return n;
+    }
+
+    template <class T>
+    const T *findLast() const
+    {
+        for (const Effect &e : last) {
+            if (const T *p = std::get_if<T>(&e)) return p;
+        }
+        return nullptr;
+    }
+
+    bool notified(TaskEvent what) const
+    {
+        for (const Effect &e : last) {
+            if (const Notify *n = std::get_if<Notify>(&e)) {
+                if (n->what == what) return true;
+            }
+        }
+        return false;
+    }
+
+    bool outputIs(const std::string &name, ctrl::OutputValue v) const { return core.outputs().holds(name, v); }
+
+    // The executor's view of what is armed: the latest StartTimer per slot across history.
+    TimerToken tokenOf(TimerKey key, int role) const
+    {
+        TimerToken t;
+        for (const Effects &fx : history) {
+            for (const Effect &e : fx) {
+                if (const auto *st = std::get_if<ctrl::StartTimer>(&e)) {
+                    if (st->key == static_cast<int>(key) && st->role == role) t = st->token;
+                }
+            }
+        }
+        return t;
+    }
+
+    Effects fire(TimerKey key, int role = -1) { return step(Timer{key, role, tokenOf(key, role)}); }
+
+    Effects status(Role role, ConnectStatus st) { return step(RoleStatus{role, st, s().role(role).epoch}); }
+
+    // Law L7 and the block invariants, after every step. Add the controller's own below.
+    void checkInvariants()
+    {
+        const State &st = s();
+        const bool ready = core.readiness().ok();
+        KT_CHECK(core.outputs().holds("bReady", ready));
+        KT_CHECK(core.outputs().holds("bFault", st.fault.isLatched()));
+        if (st.fault.isLatched()) {
+            KT_CHECK(core.outputs().holds("nFaultCode", static_cast<int>(*st.fault.latched)));
+            KT_CHECK(!ready);
+        }
+        if (st.job.phase == Phase::Working) {
+            KT_CHECK(core.outputs().holds("bBusy", true));
+            KT_CHECK(st.lifecycle.isLive());
+        }
+        if (ready) {
+            KT_CHECK(core.display() == DisplayState::Ready);
+        }
+        if (!st.lifecycle.isLive()) {
+            KT_CHECK(!ready);
+        }
+    }
+};
+
+// Brings a core to Ready the way a running system does: setup, then the device connects.
+Harness readyHarness(Policy p = Policy::defaults())
+{
+    Harness h(std::move(p));
+    h.step(Setup{});
+    h.status(Role::Device, ConnectStatus::Connected);
+    return h;
+}
+
+bool roleDiffers(const State &a, const State &b)
+{
+    const ctrl::RoleHealth &x = a.roles[0];
+    const ctrl::RoleHealth &y = b.roles[0];
+    return x.kind != y.kind || x.failedAttempts != y.failedAttempts || x.attemptInFlight != y.attemptInFlight
+           || x.faultRaised != y.faultRaised || x.epoch != y.epoch;
+}
+
+} // namespace
+
+// ---------------------------------------------------------------------------------------------
+// Table rows: given a State, when one Event, expect State', Effects, outputs, display
+// ---------------------------------------------------------------------------------------------
+
+KT_TEST(setup_requests_the_connect_and_the_device_status_makes_it_live)
+{
+    Harness h;
+    h.step(Setup{});
+    KT_CHECK(h.s().lifecycle.kind == ctrl::Lifecycle::Kind::Starting);
+    KT_CHECK(h.countLast<RequestConnect>() == 1);
+    KT_CHECK(h.countLast<ctrl::StartTimer>() == 1);
+    KT_CHECK(h.core.display() == DisplayState::NotReady);
+    h.status(Role::Device, ConnectStatus::Connected);
+    KT_CHECK(h.s().lifecycle.isLive());
+    KT_CHECK(h.core.display() == DisplayState::Ready);
+    KT_CHECK(h.notified(TaskEvent::Ready));
+    KT_CHECK(h.outputIs("bReady", true));
+}
+
+KT_TEST(a_start_runs_one_job_and_its_result_is_kept_in_state)
+{
+    Harness h = readyHarness();
+    h.step(StartRequested{});
+    KT_CHECK(h.countLast<RequestWork>() == 1);
+    KT_CHECK(h.core.display() == DisplayState::Running);
+    KT_CHECK(h.outputIs("bBusy", true));
+    h.step(StageDone{h.findLast<RequestWork>()->id, true});
+    KT_CHECK(h.core.display() == DisplayState::Ready);
+    KT_CHECK(h.outputIs("bBusy", false));
+    KT_CHECK(h.outputIs("bLastOk", true));
+    KT_CHECK(h.notified(TaskEvent::JobResult));
+}
+
+KT_TEST(a_device_lost_during_the_job_faults_with_the_policy_code_until_acknowledged)
+{
+    Harness h = readyHarness();
+    h.step(StartRequested{});
+    h.status(Role::Device, ConnectStatus::Lost);
+    KT_CHECK(h.s().fault.isLatched());
+    KT_CHECK(h.outputIs("nFaultCode", Policy::defaults().role(Role::Device).faultCode));
+    KT_CHECK(h.core.display() == DisplayState::Faulted);
+    h.status(Role::Device, ConnectStatus::Connected);
+    KT_CHECK(h.core.display() == DisplayState::Faulted);   // an acknowledge is still needed
+    h.step(AckRise{});
+    KT_CHECK(h.core.display() == DisplayState::Ready);
+}
+
+KT_TEST(stop_during_start_up_never_blocks_and_ends_idle)
+{
+    Harness h;
+    h.step(Setup{});
+    h.step(Stop{});
+    KT_CHECK(h.s().lifecycle.kind == ctrl::Lifecycle::Kind::Idle);
+    KT_CHECK(h.notified(TaskEvent::Stopped));
+    KT_CHECK(h.countLast<ctrl::CancelTimer>() >= 1);
+
+    Harness g = readyHarness();
+    g.step(Stop{});
+    KT_CHECK(g.s().lifecycle.kind == ctrl::Lifecycle::Kind::Stopping);
+    KT_CHECK(g.countLast<RequestDisconnect>() == 1);
+    g.status(Role::Device, ConnectStatus::Disconnected);
+    KT_CHECK(g.s().lifecycle.kind == ctrl::Lifecycle::Kind::Idle);
+    KT_CHECK(!g.s().fault.isLatched());
+}
+
+// ---------------------------------------------------------------------------------------------
+// Stale-completion probe (laws L3, L4): one per request kind and timer key; add as they grow
+// ---------------------------------------------------------------------------------------------
+
+KT_TEST(a_late_completion_from_an_abandoned_job_is_dropped_by_id)
+{
+    Harness h = readyHarness();
+    h.step(StartRequested{});
+    const JobId old = h.s().job.id;
+    h.fire(TimerKey::WorkDeadline);                     // the job times out: aborted, id advanced
+    KT_CHECK(h.s().fault.latched && *h.s().fault.latched == FaultCode::WorkTimeout);
+    const OutputImage before = h.core.outputs();
+    h.step(StageDone{old, true});                       // the runner's late answer
+    KT_CHECK(h.countLast<RequestWork>() == 0);
+    KT_CHECK(h.findLast<ctrl::Trace>() && h.findLast<ctrl::Trace>()->note == "stale");
+    KT_CHECK(h.core.outputs() == before);               // State unchanged: the old answer did nothing
+    KT_CHECK(h.s().fault.latched && *h.s().fault.latched == FaultCode::WorkTimeout);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Law L8: completeness sweep over representative states and one sample per event kind
+// ---------------------------------------------------------------------------------------------
+
+KT_TEST(every_state_event_pair_either_changes_something_or_explains_itself)
+{
+    std::vector<std::function<{{Name}}Core()>> states = {
+        [] { return {{Name}}Core(); },
+        [] { Harness h; h.step(Setup{}); return h.core; },
+        [] { return readyHarness().core; },
+        [] { Harness h = readyHarness(); h.step(StartRequested{}); return h.core; },
+        [] { Harness h = readyHarness(); h.step(StartRequested{}); h.fire(TimerKey::WorkDeadline); return h.core; },
+        [] { Harness h = readyHarness(); h.step(Stop{}); return h.core; },
+    };
+    std::vector<Event> samples = {
+        Setup{}, Stop{}, StartRequested{}, AckRise{},
+        RoleStatus{Role::Device, ConnectStatus::Connected, Epoch{1}},
+        StageDone{JobId{1}, true},
+        Timer{TimerKey::WorkDeadline, -1, TimerToken{1}},
+    };
+    // The compiler forces a handler per alternative but not a sample per alternative.
+    KT_CHECK(samples.size() == std::variant_size_v<Event>);
+    kt::completenessSweep<{{Name}}Core, Event>(
+        states, samples,
+        [](const Effects &fx) {
+            for (const Effect &e : fx) {
+                if (std::holds_alternative<ctrl::Trace>(e) || std::holds_alternative<ctrl::Log>(e)) return true;
+            }
+            return false;
+        },
+        // Compare every State field a handler can touch, or a real change reads as a silent no-op.
+        [](const {{Name}}Core &a, const {{Name}}Core &b) {
+            return a.display() != b.display() || a.outputs() != b.outputs()
+                   || a.state().lifecycle.kind != b.state().lifecycle.kind
+                   || a.state().job.id != b.state().job.id
+                   || a.state().job.phase != b.state().job.phase
+                   || a.state().job.held != b.state().job.held
+                   || a.state().fault.isLatched() != b.state().fault.isLatched()
+                   || a.state().timers.slots != b.state().timers.slots
+                   || a.state().lastResult.valid != b.state().lastResult.valid
+                   || a.state().lastResult.ok != b.state().lastResult.ok
+                   || roleDiffers(a.state(), b.state());
+        },
+        [](const {{Name}}Core &c, const Event &ev) {
+            return std::string(displayName(c.display())) + " x " + eventName(ev);
+        });
+}
+
+int main()
+{
+    std::printf("{{name}}_core_test: {{Name}}Core on the controller kernel (no Qt)\n\n");
+    return kt::runAll();
+}

@@ -1,0 +1,53 @@
+#ifndef {{NAME}}_CORE_STATE_H
+#define {{NAME}}_CORE_STATE_H
+
+#include <array>
+
+#include "ctrl_kernel/blocks.h"
+#include "{{name}}_core/events.h"
+
+/**
+ * @file state.h
+ * @brief {{Name}} core: the explicit state record, composed from kernel blocks. There is no stored
+ *        "ready"; readiness, outputs and display are derived (see {{Name}}Core).
+ */
+namespace {{ns}} {
+
+/// Stages of the job. Idle must stay first (kernel Job convention).
+enum class Phase { Idle = 0, Working };
+
+/// Fault codes as they appear on the wire; the numbers never change once released (law L12).
+enum class FaultCode : int { None = 0, DeviceLost = 100, WorkFailed = 200, WorkTimeout = 201 };
+
+/// Why readiness() says NotReady: a closed, ordered list so every refusal can be logged by name.
+enum class NotReadyReason { NotLive, DeviceDown, FaultLatched, JobBusy };
+
+/// Display projection; the names are stable (law L12).
+enum class DisplayState { NotReady, Ready, Running, Faulted };
+
+/// Result of the most recent job, kept because outputs() shows it until the next start.
+struct JobResult {
+    bool valid{false};
+    bool ok{false};
+};
+
+struct State {
+    ctrl::Lifecycle lifecycle;
+    ctrl::Job<Phase> job;
+    std::array<ctrl::RoleHealth, kRoleCount> roles;
+    ctrl::FaultRegister<FaultCode> fault;
+    ctrl::Timers timers;
+    JobResult lastResult;
+
+    const ctrl::RoleHealth &role(Role r) const { return roles[roleIndex(r)]; }
+    ctrl::RoleHealth &role(Role r) { return roles[roleIndex(r)]; }
+};
+
+const char *displayName(DisplayState s);
+const char *reasonName(NotReadyReason r);
+const char *roleName(Role r);
+const char *faultName(FaultCode c);
+
+} // namespace {{ns}}
+
+#endif // {{NAME}}_CORE_STATE_H

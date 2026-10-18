@@ -1,0 +1,59 @@
+#ifndef {{NAME}}_CORE_EVENTS_H
+#define {{NAME}}_CORE_EVENTS_H
+
+#include <variant>
+
+#include "ctrl_kernel/ids.h"
+
+/**
+ * @file events.h
+ * @brief {{Name}} core: every input the core can receive, normalised. Nothing here references
+ *        Qt, a runner or a device type (law L2). A completion carries the id the request carried.
+ */
+namespace {{ns}} {
+
+/// The device positions this controller coordinates. Replace with the real roles.
+enum class Role { Device = 0 };
+inline constexpr int kRoleCount = 1;
+inline int roleIndex(Role r) { return static_cast<int>(r); }
+
+/// Connection status of a role as its runner reports it (the adapter maps the device's enum).
+enum class ConnectStatus { Disconnected, Connected, Lost };
+
+/// Timer keys this core arms. Per-role keys carry the role in the slot; the rest use role -1.
+enum class TimerKey { StartDeadline = 0, StopDeadline, WorkDeadline };
+
+struct Setup {};
+struct Stop {};
+
+/// The master asks for one job (a command; a master rise edge is turned into this by its adapter).
+struct StartRequested {};
+/// The master acknowledges a latched fault.
+struct AckRise {};
+
+struct RoleStatus {
+    Role role{Role::Device};
+    ConnectStatus status{ConnectStatus::Disconnected};
+    ctrl::Epoch epoch;   ///< Binding generation the adapter stamped; older than current = stale.
+};
+
+/// Completion of the job's one stage; echoes the id carried by RequestWork.
+struct StageDone {
+    ctrl::JobId id;
+    bool ok{false};
+};
+
+struct Timer {
+    TimerKey key{TimerKey::StartDeadline};
+    int role{-1};
+    ctrl::TimerToken token;
+};
+
+using Event = std::variant<Setup, Stop, StartRequested, AckRise, RoleStatus, StageDone, Timer>;
+
+/// Stable event name for traces and the completeness sweep.
+const char *eventName(const Event &event);
+
+} // namespace {{ns}}
+
+#endif // {{NAME}}_CORE_EVENTS_H
