@@ -5,7 +5,7 @@
 // (bash -c, cmd /c, powershell -Command / -EncodedCommand, Invoke-Expression, heredocs fed to a
 // shell) and into code runners (node/python/perl/ruby -e / -c).
 //
-// Adapted from the controller-kernel guard-delete.js tokeniser (project-written, 2026).
+// Adapted from a project-written guard-delete.js tokeniser (2026).
 //
 // walk(cmd, { ps, cwd, visitor, maxDepth }) calls:
 //   visitor.command({ name, exe, args, words, redirects, cur, xargs, piped, ps, depth, cwdState })

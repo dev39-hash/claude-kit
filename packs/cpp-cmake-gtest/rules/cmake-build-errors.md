@@ -7,7 +7,7 @@ paths:
 
 > Error table for the `build-resolver` agent (read it explicitly when fixing a build); also
 > loaded when a CMake file is edited. Adapted from the ECC `cpp-build-resolver` agent (MIT)
-> and the controller-kernel / image_matching adaptations.
+> and two earlier CMake project adaptations.
 
 ## Working rules
 

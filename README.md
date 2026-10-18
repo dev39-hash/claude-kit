@@ -10,7 +10,7 @@ folders of five earlier projects (`reference/`, read-only) and the decisions rec
 install.js               node install.js --target <project> --packs <a,b>   (see core/workflow/PORTING.md)
 kit.config.schema.json   every project-specific value, with defaults
 core/                    generic layer: rules/ workflow/ roles/ agents/ skills/ commands/ hooks/ templates/
-packs/                   cpp-cmake-gtest, cpp-qmake-qt, work-package, docs-spec-driven (more to come: controller-kernel, ...)
+packs/                   cpp-cmake-gtest, cpp-qmake-qt, controller-kernel, work-package, docs-spec-driven (one README each)
 docs/                    01-tong-hop-reference.md (synthesis), 02-de-xuat-giai-phap.md (design), inventory/
 reference/               snapshots of the five source projects; never edited, not installed
 ```

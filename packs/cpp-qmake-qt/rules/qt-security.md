@@ -6,7 +6,7 @@ paths:
 ---
 # C++ / Qt safety and security (pack cpp-qmake-qt)
 
-> Adapted from ECC rules/cpp/security.md (MIT) through the ncr_picking and NichirinLaserMark
+> Adapted from ECC rules/cpp/security.md (MIT) through two earlier Qt project
 > adaptations. Industrial applications drive hardware: a defect can move a device or mark
 > the wrong part, so safety is correctness.
 

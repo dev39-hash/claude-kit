@@ -1,8 +1,8 @@
 # Pack cpp-cmake-gtest
 
 C++17 (or newer) libraries and applications built with CMake, tested with GoogleTest through
-CTest, on MSVC, GCC or Clang. Derived from the image_matching project's `.claude` (ECC rules
-adapted) and the controller-kernel build tools. Install with
+CTest, on MSVC, GCC or Clang. Derived from the `.claude` folders of two earlier CMake projects
+(ECC rules adapted, project-written build tools). Install with
 `node install.js --target <project> --packs cpp-cmake-gtest`.
 
 ## Contents
@@ -63,4 +63,4 @@ lines and toolchain paths: `.claude/project/build-env.md`.
 ## Licences
 
 The two ECC skills and the adapted rules derive from affaan-m/ECC (MIT, `LICENSE-ECC-MIT.txt`).
-`build.js` and `wt-slot.js` are project-written (controller-kernel, 2026).
+`build.js` and `wt-slot.js` are project-written (2026); the `controller-kernel` pack reuses them.

@@ -6,7 +6,7 @@ paths:
 ---
 # QtTest testing (pack cpp-qmake-qt)
 
-> From the ncr_picking and NichirinLaserMark test rules. The kit rule `06-evidence.md` (RED
+> From the test rules of two earlier Qt projects. The kit rule `06-evidence.md` (RED
 > first, negative check, shape check, never edit a test to pass) applies on top. Procedures:
 > the `qttest-headless` and `qt-ui-probe` skills.
 

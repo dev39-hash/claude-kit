@@ -6,8 +6,8 @@ paths:
 # qmake, moc, uic and MSVC build errors (pack cpp-qmake-qt)
 
 > Error table for the `build-resolver` agent (read it explicitly when fixing a build); also
-> loaded when a `.pro`/`.pri` is edited. From the ncr_picking `qmake-msvc-build` skill and the
-> NichirinLaserMark build resolver. Work from the FIRST error; one surgical fix at a time;
+> loaded when a `.pro`/`.pri` is edited. From an earlier `qmake-msvc-build` skill and a Qt
+> project's build resolver. Work from the FIRST error; one surgical fix at a time;
 > never silence a diagnostic; stop after 3 attempts on the same error.
 
 | Symptom | Real cause | Fix |

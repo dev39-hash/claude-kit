@@ -2,7 +2,7 @@
 name: inherit-legacy-style
 description: Prevent AI style drift on a hand-written legacy codebase - scan the sources for implicit conventions across four dimensions (file anatomy, state and control flow, infrastructure placement, error handling), resolve conflicts with the human one at a time, and write an enforceable .claude/rules/legacy-style.md (golden files, checkable rules, DONTs). Use when onboarding the kit onto an existing project or when generated code starts to look foreign.
 metadata:
-  origin: community (via NichirinLaserMark adaptation), paths and git access adapted to the kit
+  origin: community skill, adapted once in a Qt application project; paths and git access adapted to the kit
 allowed-tools: Read, Glob, Grep, Bash, Write, AskUserQuestion
 ---
 

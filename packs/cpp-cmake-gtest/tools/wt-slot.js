@@ -12,7 +12,7 @@
 // a reconfigure is fast and disk usage stays bounded. A lock is slotN/.lock holding {tag, time},
 // created with an exclusive open ('wx'), so two agents never get the same slot. A lock older
 // than staleHours is considered abandoned and is taken over. Long tasks call `touch`.
-// Adapted from the controller-kernel wt-slot.js (project-written, 2026).
+// Adapted from a project-written wt-slot.js (2026).
 'use strict';
 
 const fs = require('fs');

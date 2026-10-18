@@ -16,7 +16,7 @@ const path = require('path');
 const config = require('./lib/config');
 
 // Claude names the per-project dir after the project path with every non-alphanumeric
-// character replaced by '-' (C:\DGB\Project\x -> C--DGB-Project-x); the match is case-insensitive.
+// character replaced by '-' (C:\Work\x -> C--Work-x); the match is case-insensitive.
 function globalMemoryDir(root, create) {
   if (process.env.CLAUDE_MEMORY_DIR) return process.env.CLAUDE_MEMORY_DIR;
   const projects = path.join(os.homedir(), '.claude', 'projects');
