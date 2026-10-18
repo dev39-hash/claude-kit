@@ -44,26 +44,33 @@ claude-kit/
     commands/
       plan.md  review.md  build.md  test.md
     hooks/
-      lib/                      # stdin, config loader, tokenizer, path normalize, decision JSON
+      lib/                      # io (stdin, decision JSON), config (defaults + merge), paths, shell (tokenizer)
       guard-shell.js            # gộp guard-delete (c1) + guard-bash (c2) + commit-guard (c1)
-      guard-edit.js             # gộp guard-edit (c2) + protect-tree (c1)
-      subagent-model-guard.js   # từ c5, đọc models từ config
-      sync-memory.js            # từ c1, thêm --dry-run, không xóa khi restore
-      format-cpp.js             # từ c1
-      test-hooks.js             # từ c2 test-guards, mở rộng cho mọi hook
+      guard-edit.js             # gộp guard-edit (c2) + protect-tree (c1); chặn cả bản kích hoạt theo kit.manifest.json
+      subagent-model-guard.js   # từ c5, đọc models từ config, fail-closed
+      sync-memory.js            # từ c1; --restore không xóa, --dry-run, --status có kết luận
+      format.js                 # từ c1 format-cpp, chỉ chạy khi repo có config formatter
+      test-hooks.js             # table-driven, 220 case + unit
+      settings.template.json    # sinh settings.json; pack nối thêm qua settings.fragment.json
     templates/
-      brief.md  task.md  report.md  adr.md  plan.md
+      brief.md  task.md  report.md  adr.md  plan.md  decisions.md  lessons.md
       project-context.md  project-rules.md  task-classification.md  definition-of-done.md  build-env.md
-  packs/
-    cpp-cmake-gtest/            # c3: ECC common+cpp rules, cpp-testing, build.js, wt-slot.js, golden workflow
-    cpp-qmake-qt/               # c2+c4: qmake-msvc-build, qttest-headless, qt-cpp-review, qt-cpp-docs, Qt rules, bảng lỗi qmake
-    controller-kernel/          # c1 layer A: controller-* skills, kernel-laws, qt-shell, gate-check, kernel-gates
-    work-package/               # c2: WP handoff, touch-list, /review-wp, bundle 2 máy
-    docs-spec-driven/           # c4: docs-structure, code-comments, repo-boundaries, backlog, ADR Dn
-    agent-skills-lite/          # c5: 6 skill generic + 2 references, giữ LICENSE
-    hooks-powershell/           # bản ps1 tối thiểu cho máy cấm Node (c4)
-  LICENSES/                     # ECC MIT, Qt pack, addyosmani MIT
+  packs/                        # mỗi pack: README, rules/ skills/ agents/ commands/ hooks/ tools/ references/
+    cpp-cmake-gtest/            # c3+c1: ECC rules adapted, cpp-testing, build.js, wt-slot.js, golden workflow
+    cpp-qmake-qt/               # c2+c4: qmake-msvc-build, qttest-headless, qt-ui-probe, qt-cpp-review, qt-cpp-docs
+    controller-kernel/          # c1 layer A: 5 controller-* skills + templates, kernel-verify, 3 rules, controller-reviewer,
+                                #   /controller-review, gate-check.js (tham số hóa), hook kernel-gates
+    work-package/               # c2: WP handoff, touch-list, /review-wp, worktree slots, wt-guard, bundle 2 máy
+    docs-spec-driven/           # c4: docs-structure, code-comments, repo-boundaries, backlog, ADR Dn, docs-gate.js
+    agent-skills-lite/          # c5: 6 skill + 2 references vendored nguyên văn, 1 rule "advisory"
+    hooks-powershell/           # c4: guard-shell, subagent-model-guard, sync-memory bản ps1, 72 case test
+  LICENSES/                     # ECC MIT, Qt BSD-3, agent-skills MIT + README chỉ file nào thuộc licence nào
 ```
+
+Khác với đề xuất ban đầu: `format-cpp.js` thành `format.js` tool-neutral; `decisions.md`, `lessons.md` là template của core;
+pack có thêm thư mục `tools/` (cài vào `.claude/tools/<pack>/`) và `references/` (cài phẳng vào `.claude/references/`);
+`agent-skills-lite` giữ nguyên văn (có non-ASCII) và được miễn rule ASCII như skill Qt; `hooks-powershell` khi bật tự đặt
+`hooks.runtime = powershell` và installer bỏ các hook Node khỏi `settings.json`.
 
 ### 2.2 Kết quả trong một project sau khi cài
 
@@ -168,20 +175,51 @@ Ghi chú: Claude Code chỉ tự động đọc `.claude/rules/`, `.claude/agent
 5. Chạy thử một task nhỏ qua đủ 2 gate trước khi tin.
 6. Cập nhật kit: sửa ở `claude-kit`, chạy `install.js --update` (chỉ ghi đè core/packs).
 
-## 5. Lộ trình
+## 5. Lộ trình và trạng thái (cập nhật 2026-10-18)
 
-| Bước | Việc | Đầu vào |
-|---|---|---|
-| 0 | Bạn chốt 16 điểm ở mục 5 của `01-tong-hop-reference.md` | — |
-| 1 | Dựng `core/`: rules (6 file), workflow + role lead, 5 agents, templates, `kit.config.schema.json` | c5 core, c1 delegation/project.md, c3 agents, c2 wp rules |
-| 2 | Hooks Node tham số hóa + `test-hooks.js` (mục tiêu ≥ 120 case) | c1 guard-delete/commit-guard/protect-tree, c2 guard-bash/guard-edit/test-guards, c5 model guard |
-| 3 | `install.js` + `CLAUDE.template.md` + `PORTING.md` | c5 PORTING |
-| 4 | Packs: `cpp-cmake-gtest`, `cpp-qmake-qt` trước; `controller-kernel`, `work-package`, `docs-spec-driven`, `agent-skills-lite` sau | c1–c5 |
-| 5 | Cài thử vào một project mới (dry-run), rồi retrofit image_matching (sạch nhất), sau đó controller-kernel, ncr_picking, mc_protocol | — |
-| 6 | NichirinLaserMark: pack `hooks-powershell` hoặc cài Node portable | c4 |
+| Bước | Việc | Đầu vào | Trạng thái |
+|---|---|---|---|
+| 0 | Chốt 16 điểm ở mục 5 của `01-tong-hop-reference.md` | — | Xong, đã đưa vào core |
+| 1 | Dựng `core/`: 7 rules, workflow + role lead, 5 agents, 6 skills, 4 commands, 12 templates, `kit.config.schema.json` | c5 core, c1 delegation/project.md, c3 agents, c2 wp rules | Xong |
+| 2 | Hooks Node tham số hóa + `test-hooks.js` (mục tiêu ≥ 120 case) | c1 guard-delete/commit-guard/protect-tree, c2 guard-bash/guard-edit/test-guards, c5 model guard | Xong, 220 case |
+| 3 | `install.js` + `CLAUDE.template.md` + `PORTING.md` | c5 PORTING | Xong: `--update`, `--dry-run`, `--test`, `--add-exclude`, manifest, merge config viết tay |
+| 4 | 7 packs: `cpp-cmake-gtest`, `cpp-qmake-qt`, `controller-kernel`, `work-package`, `docs-spec-driven`, `agent-skills-lite`, `hooks-powershell` | c1–c5 | Xong cả 7; mỗi pack có README, pack có hook/tool thì có test riêng |
+| 5 | Cài thật và chạy một task qua đủ workflow | — | Đã làm trên ncr_picking (dev machine, 2026-10-18): T-001 qua 2 gate, 15 dòng hook kiểm chứng, 16 kit issue K1–K16 đã sửa và merge vào `main`. Còn: image_matching, controller-kernel, mc_protocol |
+| 6 | NichirinLaserMark: pack `hooks-powershell` | c4 | Pack xong, 72 case chạy xanh bằng pwsh 7 trên Linux; chưa chạy trên Windows PowerShell 5.1 của máy đó |
 
-## 6. Việc mình có thể làm ngay sau khi bạn chốt
+## 6. Tiến độ hiện tại và việc tiếp theo
 
-- Viết bộ `core/` (rules, workflow, roles, agents, templates) bằng tiếng Anh, ASCII.
-- Viết hooks Node tham số hóa và bộ test.
-- Viết `install.js` và chạy dry-run vào một thư mục tạm.
+Tình trạng repo `claude-kit` (`main` = `5b926bb`): 5 commit sau bản khởi tạo; bộ test
+`node core/hooks/test-hooks.js` 220/220, `packs/controller-kernel/hooks/test-kernel-gates.js`,
+`packs/work-package/hooks/test-wt-guard.js` 18/18, `packs/docs-spec-driven/tools/test-docs-gate.js`,
+`packs/hooks-powershell/hooks/test-hooks.ps1` 72/72 (pwsh 7) đều 0 fail. Cài thử 5 pack cùng lúc
+vào thư mục tạm và `--update` lại đều đúng layout.
+
+Bài học từ dry-run ncr_picking đã vào kit:
+
+- Bản kích hoạt (`.claude/rules|agents|skills|commands|tools|references`) được bảo vệ theo
+  `kit.manifest.json`; file project tự viết trong các thư mục đó vẫn sửa được (K1).
+- Reviewer không có Write/Edit: trả khối verdict, leader dán vào task file (K14).
+- Trường **Baseline** ở Gate 1 cho thay đổi git không thấy; gate "chỉ diff" với số nợ cũ (K4, K15).
+- Gate 2 đổi deliverable là ruling: ghi `decisions.md`, quay lại implement, review lại (K16).
+- Pack work-package nới lệnh cấm từ vựng của rule 02 cho tài liệu plan được track (K3).
+
+Việc tiếp theo, theo thứ tự:
+
+1. **ncr_picking**: `install.js --update` để nhận K1–K16; chạy lại `test-hooks.js`; chốt ba câu hỏi
+   mở của report (commit T-002 `.gitignore`, bundle note cho máy deploy, test đỏ một lần phía deploy).
+2. **image_matching** (`cpp-cmake-gtest`, sạch nhất): cài, điền `kit.config.json` và 5 file
+   `project/*.md`, một task nhỏ qua 2 gate, report kit issue theo mẫu của ncr_picking.
+3. **controller-kernel** (`cpp-cmake-gtest,controller-kernel`): kiểm chứng gate-check và hook
+   kernel-gates trên mã thật (ví dụ hố L3/L4 trong `kernel-gaps.md` mục 14); so bảng `L9-literal`
+   với `packConfig.controller-kernel.walkDirs` của repo.
+4. **mc_protocol** (`cpp-cmake-gtest,agent-skills-lite`, có thể thêm `docs-spec-driven`): retrofit từ
+   `agent-team/`, giữ `decisions.md`/`lessons.md` cũ; đây là nơi so sánh workflow kit với bản gốc c5.
+5. **NichirinLaserMark** (`cpp-qmake-qt,docs-spec-driven,hooks-powershell`): cài từ máy có Node
+   hoặc copy `.claude/`; chạy `test-hooks.ps1` trên PowerShell 5.1; sửa những gì chỉ 5.1 mới lộ.
+6. Sau mỗi lần cài: issue về kit đi vào `.claude/docs/notes/<date>_kit-dry-run-report.md` mục 5
+   như ncr_picking đã làm, rồi sửa ở kit và `--update` cho mọi project.
+
+Chưa có trong lộ trình, cân nhắc sau: `guard-edit` bản PowerShell (máy cấm Node hiện không có hook
+cho edit); gate ASCII chạy trên diff trong hook thay vì chỉ trong verification-loop; versioning kit
+(`package.json`, `kitVersion` trong manifest đã có chỗ) để `--update` báo được bản nào sang bản nào.
