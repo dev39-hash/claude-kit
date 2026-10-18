@@ -42,11 +42,9 @@ Enabled packs: {{packs}}.
 
 ## Hooks (`.claude/settings.json`)
 
-Pre: `guard-shell` (deletes, destructive git, identity, attribution, kills), `guard-edit`
-(read-only paths, forbidden tree files, ASCII, kit files), `subagent-model-guard` (models,
-no fork). Post: `format` (only with a formatter config){{packHooks}}. Stop: `sync-memory`.
+{{hooksBlock}}
 Hooks are guard rails, not permission; the build and the tests are the source of truth.
-Test them with `node .claude/hooks/test-hooks.js`.
+Test them with `{{hooksTest}}`.
 
 ## Project notes
 

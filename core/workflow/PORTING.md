@@ -22,6 +22,9 @@ does steps 1-3; the rest is by hand.
    Other flags: `--dry-run` (print the plan), `--name <project>`, `--add-exclude` (append
    `.claude/` to `.git/info/exclude` when it is not ignored), `--test` (run the hook tests
    afterwards), `--force` (also rewrite `CLAUDE.md` and `settings.json`), `--list-packs`.
+   A machine without Node takes the `hooks-powershell` pack: install from a machine with
+   Node (or copy the generated `.claude/`), and the PowerShell twins of the guards are wired
+   instead of the Node hooks (`packs/hooks-powershell/README.md`).
 
 2. **Fill `kit.config.json`.** Identity and denied emails, protected / read-only / local-only
    paths, process names, ASCII extensions and exemptions, build slots and toolchain, models,

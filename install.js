@@ -6,8 +6,10 @@
 //
 // What it does (see core/workflow/PORTING.md):
 //   1. copies core/ and the chosen packs/ into <target>/.claude/ (kit-managed, never edited there);
-//   2. activates them where Claude Code looks: rules/, agents/, skills/, commands/, hooks/;
-//   3. writes settings.json (hooks via $CLAUDE_PROJECT_DIR, timeouts from the config),
+//   2. activates them where Claude Code looks: rules/, agents/, skills/, commands/, hooks/
+//      (plus tools/<pack>/ and a pack's references/ next to the skills);
+//   3. writes settings.json (hooks via $CLAUDE_PROJECT_DIR, timeouts from the config; with the
+//      hooks-powershell pack the Node hook entries are left out and hooks.runtime is set),
 //      kit.config.json (defaults + name + packs; kept when present), kit.config.schema.json;
 //   4. creates the project layer from the templates (context, rules, task-classification,
 //      definition-of-done, build-env), docs/{plan,adr,briefs,notes}, decisions.md, lessons.md,
@@ -122,12 +124,14 @@ class Installer {
       cfg.packs = [...packs];
       if (this.o.name && !cfg.project.name) cfg.project.name = this.o.name;
       cfg.kitVersion = KIT_VERSION;
+      if (cfg.packs.includes('hooks-powershell')) cfg.hooks = Object.assign({}, cfg.hooks || {}, { runtime: 'powershell' });
       this.writeFile(file, JSON.stringify(cfg, null, 2) + '\n', { overwrite: true });
     } else {
       cfg = JSON.parse(JSON.stringify(DEFAULTS));
       cfg.kitVersion = KIT_VERSION;
       cfg.project.name = this.o.name || path.basename(this.target);
       cfg.packs = [...new Set(this.o.packs)];
+      if (cfg.packs.includes('hooks-powershell')) cfg.hooks.runtime = 'powershell';
       this.writeFile(file, JSON.stringify(cfg, null, 2) + '\n');
     }
     this.cfg = cfg;
@@ -183,7 +187,15 @@ class Installer {
       // tools: packs under tools/<pack>/ (a pack may also put a top-level alias in its README)
       const tl = path.join(L.dir, 'tools');
       if (this.exists(tl)) this.copyTree(tl, isPack ? path.join(this.claude, 'tools', L.name) : path.join(this.claude, 'tools'));
+      // references: flat, so a skill's ../../references/<file>.md link resolves from .claude/skills/<skill>/
+      const rf = path.join(L.dir, 'references');
+      if (this.exists(rf)) this.copyTree(rf, path.join(this.claude, 'references'));
     }
+  }
+
+  // The hooks-powershell pack replaces the core Node hooks on machines without Node.
+  get psRuntime() {
+    return (this.cfg.hooks && this.cfg.hooks.runtime === 'powershell') || this.cfg.packs.includes('hooks-powershell');
   }
 
   writeSettings() {
@@ -193,16 +205,30 @@ class Installer {
     const t = (this.cfg.hooks && this.cfg.hooks.timeoutSeconds) || {};
     const timeoutFor = (cmd) => /format\.js/.test(cmd) ? (t.format || 30) : /sync-memory\.js/.test(cmd) ? (t.stop || 15) : (t.guard || 10);
     for (const ev of Object.keys(tpl.hooks)) for (const entry of tpl.hooks[ev]) for (const h of entry.hooks) h.timeout = timeoutFor(h.command);
+    if (this.psRuntime) {
+      // no Node on this machine: drop the core Node hook entries; the pack fragment wires the .ps1 twins
+      for (const ev of Object.keys(tpl.hooks)) {
+        tpl.hooks[ev] = tpl.hooks[ev].map((entry) => Object.assign({}, entry, { hooks: entry.hooks.filter((h) => !/^node\s/.test(String(h.command))) })).filter((entry) => entry.hooks.length);
+        if (!tpl.hooks[ev].length) delete tpl.hooks[ev];
+      }
+      tpl.permissions.allow = tpl.permissions.allow.filter((p) => !/^Bash\(node /.test(p));
+    }
     // pack fragments: packs/<p>/hooks/settings.fragment.json {"hooks": {...}, "permissions": {"allow": [...]}}
     for (const p of this.cfg.packs) {
       const frag = path.join(this.packDir(p), 'hooks', 'settings.fragment.json');
       if (!this.exists(frag)) continue;
       const f = JSON.parse(fs.readFileSync(frag, 'utf8'));
+      const psExe = p === 'hooks-powershell' && this.cfg.packConfig && this.cfg.packConfig[p] && this.cfg.packConfig[p].exe;
       for (const ev of Object.keys(f.hooks || {})) {
-        tpl.hooks[ev] = (tpl.hooks[ev] || []).concat(f.hooks[ev].map((entry) => ({
-          matcher: entry.matcher,
-          hooks: entry.hooks.map((h) => Object.assign({}, h, { command: h.command.replace('{{pack}}', '$CLAUDE_PROJECT_DIR/.claude/hooks/' + p), timeout: h.timeout || t.guard || 10 })),
-        })));
+        tpl.hooks[ev] = (tpl.hooks[ev] || []).concat(f.hooks[ev].map((entry) => {
+          const out = { hooks: entry.hooks.map((h) => {
+            let command = h.command.replace('{{pack}}', '$CLAUDE_PROJECT_DIR/.claude/hooks/' + p);
+            if (psExe) command = command.replace(/^powershell\s/, psExe + ' ');
+            return Object.assign({}, h, { command, timeout: h.timeout || t.guard || 10 });
+          }) };
+          if (entry.matcher) out.matcher = entry.matcher;
+          return out;
+        }));
       }
       if (f.permissions && f.permissions.allow) tpl.permissions.allow = tpl.permissions.allow.concat(f.permissions.allow);
     }
@@ -255,7 +281,7 @@ class Installer {
       const cm = path.join(this.packDir(p), 'commands');
       if (this.exists(cm)) for (const f of fs.readdirSync(cm)) packCommands.push('`/' + f.replace(/\.md$/, '') + '`');
       const hk = path.join(this.packDir(p), 'hooks');
-      if (this.exists(hk)) for (const f of fs.readdirSync(hk)) if (/\.js$/.test(f) && !/test/.test(f)) packHooks.push('`' + p + '/' + f.replace(/\.js$/, '') + '`');
+      if (this.exists(hk)) for (const f of fs.readdirSync(hk)) if (/\.(js|ps1)$/.test(f) && !/^(test|lib)/.test(f)) packHooks.push('`' + p + '/' + f.replace(/\.(js|ps1)$/, '') + '`');
     }
     let text = fs.readFileSync(path.join(KIT, 'core', 'CLAUDE.template.md'), 'utf8')
       .replace(/\{\{project\.name\}\}/g, cfg.project.name || path.basename(this.target))
@@ -264,7 +290,17 @@ class Installer {
       .replace(/\{\{models\.reviewer\}\}/g, cfg.models.reviewer)
       .replace(/\{\{packSkills\}\}/g, packSkills.length ? ', ' + packSkills.join(', ') : '')
       .replace(/\{\{packCommands\}\}/g, packCommands.length ? ', ' + packCommands.join(', ') : '')
-      .replace(/\{\{packHooks\}\}/g, packHooks.length ? ', ' + packHooks.join(', ') : '')
+      .replace(/\{\{hooksBlock\}\}/g, this.psRuntime
+        ? 'PowerShell hooks (no Node on this machine): `hooks-powershell/guard-shell` (push policy, destructive git,\n' +
+          'identity, attribution, kills, protected deletes, PowerShell writes into sources), `hooks-powershell/subagent-model-guard`\n' +
+          '(models, no fork), Stop: `hooks-powershell/sync-memory`' +
+          (packHooks.filter((h) => !/hooks-powershell/.test(h)).length ? '. Not wired (Node): ' + packHooks.filter((h) => !/hooks-powershell/.test(h)).join(', ') : '') + '.'
+        : 'Pre: `guard-shell` (deletes, destructive git, identity, attribution, kills), `guard-edit`\n' +
+          '(read-only paths, forbidden tree files, ASCII, kit files), `subagent-model-guard` (models,\n' +
+          'no fork). Post: `format` (only with a formatter config)' + (packHooks.length ? ', ' + packHooks.join(', ') : '') + '. Stop: `sync-memory`.')
+      .replace(/\{\{hooksTest\}\}/g, this.psRuntime
+        ? 'powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/hooks-powershell/test-hooks.ps1'
+        : 'node .claude/hooks/test-hooks.js')
       .replace(/\{\{packs\}\}/g, packs.length ? packs.map((p) => '`' + p + '`').join(', ') : 'none')
       .replace(/\{\{buildBlock\}\}/g, 'Exact commands: `.claude/project/build-env.md` (copy from a run that worked). Summary:\n\n```bash\n<configure>\n<build>\n<test>\n```')
       .replace(/\{\{projectNotes\}\}/g, '<10-20 lines: read-first list for this repo, module map, what is in flight. No status paragraphs with hashes or dates; those live in project/context.md and the task files.>');
@@ -275,7 +311,7 @@ class Installer {
     const file = path.join(this.claude, 'kit.manifest.json');
     let old = [];
     if (this.exists(file)) { try { old = JSON.parse(fs.readFileSync(file, 'utf8')).files || []; } catch (_) { old = []; } }
-    const stale = old.filter((p) => !this.managed.has(p) && /^\.claude\/(core|packs|rules|agents|skills|commands|hooks|tools)\//.test(p));
+    const stale = old.filter((p) => !this.managed.has(p) && /^\.claude\/(core|packs|rules|agents|skills|commands|hooks|tools|references)\//.test(p));
     for (const p of stale) {
       const abs = path.join(this.target, p);
       if (!this.exists(abs)) continue;
@@ -332,7 +368,11 @@ class Installer {
     console.log('  1. fill .claude/kit.config.json (identity, denied emails, read-only paths, processes, ASCII lists, models, packs)');
     console.log('  2. fill .claude/project/{context,rules,task-classification,definition-of-done,build-env}.md');
     console.log('  3. edit .claude/CLAUDE.md project lines; make sure .claude/ is ignored');
-    console.log('  4. node .claude/hooks/test-hooks.js   (must be 0 failures)');
+    if (this.psRuntime) {
+      const exe = (this.cfg.packConfig && this.cfg.packConfig['hooks-powershell'] && this.cfg.packConfig['hooks-powershell'].exe) || 'powershell';
+      console.log('  4. ' + exe + ' -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/hooks-powershell/test-hooks.ps1   (must be 0 failures; hooks.runtime = powershell, no Node hooks wired)');
+    }
+    else console.log('  4. node .claude/hooks/test-hooks.js   (must be 0 failures)');
     console.log('  5. dry-run one small task through both gates');
   }
 }
@@ -352,8 +392,17 @@ function main() {
   inst.run();
   inst.report();
   if (o.test && !o.dry) {
+    const env = Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: inst.target });
+    if (inst.psRuntime) {
+      const exe = (inst.cfg.packConfig && inst.cfg.packConfig['hooks-powershell'] && inst.cfg.packConfig['hooks-powershell'].exe) || 'powershell';
+      const script = path.join(inst.claude, 'hooks', 'hooks-powershell', 'test-hooks.ps1');
+      console.log('\nRunning PowerShell hook tests (' + exe + ')...');
+      const r = spawnSync(exe, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script], { stdio: 'inherit', env });
+      if (r.error) { console.log('  ' + exe + ' not found here; run on the target machine: ' + exe + ' -NoProfile -ExecutionPolicy Bypass -File ' + script); return 0; }
+      return r.status || 0;
+    }
     console.log('\nRunning hook tests...');
-    const r = spawnSync(process.execPath, [path.join(inst.claude, 'hooks', 'test-hooks.js')], { stdio: 'inherit', env: Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: inst.target }) });
+    const r = spawnSync(process.execPath, [path.join(inst.claude, 'hooks', 'test-hooks.js')], { stdio: 'inherit', env });
     return r.status || 0;
   }
   return 0;
