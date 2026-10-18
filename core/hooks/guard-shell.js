@@ -18,7 +18,9 @@
 //   ask   - every other push; destructive git (reset --hard, clean, checkout --, restore,
 //           branch -D, rebase, amend, stash drop, tag -d, ...); kill by name; deletes outside
 //           the project (Claude's temp and scratchpad excepted), of paths.localOnly, or of a
-//           target that cannot be resolved statically; edits of paths.askBeforeEdit.
+//           target that cannot be resolved statically; edits of paths.askBeforeEdit;
+//           in-place rewrites (sed -i, perl -i) of a project file outside the temp and build
+//           folders, which lose CRLF and encoding (use the Edit tool).
 //   allow - everything else; no output is written (the normal permission flow continues).
 //
 // Commands are tokenised like a shell (quotes, ; && || |, redirections, heredocs, here-strings)
@@ -248,6 +250,9 @@ class Guard {
     this.memoryAbs = P.norm(this.root + '/' + (cfg.paths.memoryMirror || '.claude/memory'));
     this.kitAbs = ['.claude/core', '.claude/packs', '.claude/hooks', '.claude/settings.json', '.claude/kit.config.json']
       .map((s) => P.norm(this.root + '/' + s)).concat([this.memoryAbs]);
+    const b = cfg.build || {};
+    this.buildDirs = [].concat(b.buildDirPatterns || [], b.leadBuildDir ? [b.leadBuildDir + '/'] : [],
+      b.slots && b.slots.dir ? [b.slots.dir + '/', b.slots.dir + '-*'] : []);
   }
 
   relOf(abs) { return P.rel(abs, this.root); }
@@ -305,6 +310,22 @@ class Guard {
       this.d.deny(verb + ' of a source file from PowerShell (' + t0 + ') on a ' + this.cfg.encoding.codePage +
         ' machine mangles UTF-8. Use the Edit/Write tools or [IO.File]::WriteAllText(path, text, (New-Object Text.UTF8Encoding $false)).');
     }
+  }
+
+  // sed -i / perl -i rewrite a file through the shell: a tracked source loses its CRLF line
+  // endings and its bytes go through the shell's encoding. Read-only and kit targets stay denied
+  // by checkWriteTarget; any other file inside the project, outside Claude's temp folders and
+  // the build directories, asks so the Edit tool is used instead.
+  checkInPlaceEdit(t0, cur, verb) {
+    this.checkWriteTarget(t0, cur, verb);
+    const r = P.resolveTarget(t0, cur);
+    if (r.err) return;
+    const abs = r.abs;
+    if (!P.under(abs, this.root) || P.inTemp(abs, this.temps)) return;
+    if (P.matchAny(abs, this.root, this.buildDirs)) return;
+    if (P.matchAny(abs, this.root, this.cfg.paths.readOnly) || this.kitAbs.some((k) => P.under(abs, k))) return;
+    this.d.ask(verb + ' rewrites ' + (this.relOf(abs) || t0) + ' in place through the shell: CRLF becomes LF and the bytes ' +
+      'are re-encoded. Use the Edit tool for project files, or confirm with the human.');
   }
 
   parseDeleteArgs(name, args) {
@@ -592,11 +613,19 @@ class Guard {
       }
       return null;
     }
-    if (name === 'sed' && args.some((a) => /^-[a-zA-Z]*i/.test(a) || a === '--in-place')) {
+    if (name === 'sed' && args.some((a) => /^-[a-zA-Z]*i/.test(a) || /^--in-place(=|$)/.test(a))) {
       const pos = args.filter((a) => !/^-/.test(a));
       const hasScriptFlag = args.some((a) => /^(-e|-f|--expression|--file)$/.test(a));
       const files = hasScriptFlag ? pos.filter((a) => !args.some((x, k) => /^(-e|-f|--expression|--file)$/.test(x) && args[k + 1] === a)) : pos.slice(1);
-      for (const f of files) this.checkWriteTarget(f, c.cur, 'sed -i');
+      for (const f of files) this.checkInPlaceEdit(f, c.cur, 'sed -i');
+      return null;
+    }
+    if (name === 'perl' && args.some((a) => /^-[pnlaw]*i(?:[^A-Za-z]\S*)?$/.test(a))) {
+      const pos = args.filter((a) => !/^-/.test(a));
+      const scriptFlag = (x) => /^-[A-Za-z]*[eE]$/.test(x);
+      const hasScriptFlag = args.some(scriptFlag);
+      const files = hasScriptFlag ? pos.filter((a) => !args.some((x, k) => scriptFlag(x) && args[k + 1] === a)) : pos.slice(1);
+      for (const f of files) this.checkInPlaceEdit(f, c.cur, 'perl -i');
       return null;
     }
     if (name === 'tee' || name === 'tee-object') {
