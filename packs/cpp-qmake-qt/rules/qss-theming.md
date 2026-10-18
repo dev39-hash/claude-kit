@@ -7,7 +7,7 @@ paths:
 ---
 # QSS theming with design tokens (pack cpp-qmake-qt)
 
-> From the NichirinLaserMark `ThemeManager` lessons. Applies to projects that use a token
+> From the `ThemeManager` lessons of a Qt application project. Applies to projects that use a token
 > system (`@{group.token}` placeholders resolved before `setStyleSheet`); `project/rules.md`
 > names the token table location and the design-rules document.
 

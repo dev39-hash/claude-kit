@@ -6,7 +6,7 @@ paths:
 ---
 # C++ / Qt patterns (pack cpp-qmake-qt)
 
-> Adapted from ECC rules/cpp/patterns.md (MIT) through the ncr_picking and NichirinLaserMark
+> Adapted from ECC rules/cpp/patterns.md (MIT) through two earlier Qt project
 > adaptations. `project/rules.md` names the error strategy (exceptions at the boundary, or
 > none at all) and the threading model.
 

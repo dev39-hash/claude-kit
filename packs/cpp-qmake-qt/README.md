@@ -1,8 +1,8 @@
 # Pack cpp-qmake-qt
 
 Qt applications and libraries built with qmake and MSVC (nmake or jom) on Windows, tested
-with QtTest, Qt 5 or Qt 6. Derived from the ncr_picking and NichirinLaserMark `.claude`
-folders (ECC rules adapted) and The Qt Company's agent-skills pack. Install with
+with QtTest, Qt 5 or Qt 6. Derived from the `.claude` folders of two earlier Qt projects
+(ECC rules adapted) and The Qt Company's agent-skills pack. Install with
 `node install.js --target <project> --packs cpp-qmake-qt`.
 
 ## Contents

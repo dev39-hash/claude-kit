@@ -1,6 +1,6 @@
 # Pack work-package
 
-The work-package regime of the ncr_picking project, made generic: a handoff file is the
+The work-package regime of a two-machine Qt project, made generic: a handoff file is the
 specification, the implementer commits on its own branch, the leader reviews and merges
 `--no-ff`, parallel packages run in git worktree slots that share vendored trees by
 junction, and two machines without a common remote exchange commits through range bundles
@@ -65,4 +65,4 @@ asks before deletes of `paths.localOnly`; `wt-guard` adds the junction-specific 
 
 ## Origin
 
-Project-written (ncr_picking, 2026); no third-party licence.
+Project-written (2026); no third-party licence.

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Configure / build / test a CMake project without remembering where cmake lives
-// (pack cpp-cmake-gtest). Adapted from the controller-kernel build.js (project-written, 2026).
+// (pack cpp-cmake-gtest). Adapted from a project-written build.js (2026).
 //
 //   node .claude/tools/cpp-cmake-gtest/build.js <configure|build|test|all>
 //        [--config Debug|Release] [--dir <dir>] [--slot <tag>] [--release-slot]

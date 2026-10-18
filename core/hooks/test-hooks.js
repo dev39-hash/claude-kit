@@ -51,7 +51,7 @@ const CONFIG = {
     askBeforeEdit: ['3rdparty/'],
     localOnly: ['.wt/', 'product_release/', '.claude/'],
   },
-  processes: { neverKill: ['ncr_picking', 'ncr_runtime'], neverLaunch: ['ncr_picking', 'ncr_runtime'] },
+  processes: { neverKill: ['machine_ui', 'machine_runtime'], neverLaunch: ['machine_ui', 'machine_runtime'] },
   encoding: { codePage: 'cp932', asciiExempt: ['*.ts', '3rdparty/', 'components/'] },
 };
 fs.writeFileSync(path.join(P, '.claude', 'kit.config.json'), JSON.stringify(CONFIG, null, 2));
@@ -93,7 +93,7 @@ const cases = [
   bash('git log --oneline -5 && git diff --stat', 'allow'),
   bash('ls -la && cat README.md', 'allow'),
   bash('grep -rn "rm -rf" docs/', 'allow'),
-  bash('echo "never kill ncr_runtime.exe; rm -rf nothing"', 'allow'),
+  bash('echo "never kill machine_runtime.exe; rm -rf nothing"', 'allow'),
   // --- staging and committing
   bash('git add docs/README.md src/a.cpp', 'allow'),
   bash('git add -A', 'deny'),
@@ -165,10 +165,10 @@ const cases = [
   bash('git gc --prune=now', 'ask'),
   bash('bash -c "git push origin main"', 'ask'),
   // --- processes
-  bash('taskkill /IM ncr_runtime.exe /F', 'deny'),
-  pwsh('Get-Process ncr_picking | Stop-Process', 'deny'),
-  pwsh('Get-Process ncr_runtime,ncr_picking -ErrorAction SilentlyContinue', 'allow'),
-  bash('tasklist | grep -i ncr_', 'allow'),
+  bash('taskkill /IM machine_runtime.exe /F', 'deny'),
+  pwsh('Get-Process machine_ui | Stop-Process', 'deny'),
+  pwsh('Get-Process machine_runtime,machine_ui -ErrorAction SilentlyContinue', 'allow'),
+  bash('tasklist | grep -i machine_', 'allow'),
   bash('taskkill /IM other_tests.exe /F', 'ask'),
   pwsh('Stop-Process -Name findstr', 'ask'),
   bash('taskkill /PID 1234 /F', 'allow'),
@@ -177,9 +177,9 @@ const cases = [
   bash('kill -9 4321', 'allow'),
   bash('pkill node', 'ask'),
   pwsh('Get-Process -Id 42 | Stop-Process', 'allow'),
-  pwsh('Start-Process ncr_picking.exe', 'deny'),
-  bash('./build/bin/ncr_runtime.exe --help', 'deny'),
-  bash('start build/bin/ncr_picking.exe', 'deny'),
+  pwsh('Start-Process machine_ui.exe', 'deny'),
+  bash('./build/bin/machine_runtime.exe --help', 'deny'),
+  bash('start build/bin/machine_ui.exe', 'deny'),
   bash('./build/bin/other_tool.exe --help', 'allow'),
   // --- deletes inside and outside
   bash('rm -rf build/old', 'allow'),

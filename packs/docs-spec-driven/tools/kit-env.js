@@ -40,6 +40,7 @@ const DEFAULTS = {
   exemptPaths: ['LICENSE*', 'NOTICE*', 'COPYING*', '*.license', '*.min.js'],
   urlAllow: ['xmlns', 'DOCTYPE', 'SPDX-License', 'schemas.', 'w3.org'],
   machinePathAllow: [],
+  machinePathRoots: [],
   extraPhaseWords: [],
   codeExtensions: ['.c', '.cc', '.cpp', '.cxx', '.h', '.hpp', '.hxx', '.inl', '.py', '.js', '.ts', '.cs', '.java',
     '.go', '.rs', '.cmake', '.pro', '.pri', '.ps1', '.bat', '.sh', '.ui', '.qss', '.qrc'],

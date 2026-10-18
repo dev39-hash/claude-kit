@@ -148,6 +148,10 @@ class Gate {
     this.exemptRes = (pc.exemptPaths || []).map(globToRe);
     this.urlAllow = (pc.urlAllow || []).map((s) => new RegExp(s, 'i'));
     this.pathAllow = (pc.machinePathAllow || []).map((s) => new RegExp(s, 'i'));
+    // drive-letter roots that mark a machine-local path; packConfig machinePathRoots adds the owner's own
+    const roots = ['Users', 'home', 'Program Files', 'Qt', 'dev', 'src', 'work', 'proj', 'projects']
+      .concat(pc.machinePathRoots || []).map((s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    this.machinePathRe = new RegExp('\\b[A-Za-z]:[\\\\/](?:' + roots.join('|') + ')\\b|\\/home\\/[A-Za-z0-9_]+\\/|\\/Users\\/[A-Za-z0-9_]+\\/|%USERPROFILE%|\\$env:USERPROFILE');
     this.phaseRes = [/\b[Pp][Hh][Aa][Ss][Ee][ _-]?\d+[A-Za-z]?\b/, /\bCP\d\b/].concat((pc.extraPhaseWords || []).map((s) => new RegExp(s)));
     this.adrCite = new RegExp('\\bADR\\s+' + pc.adrPrefix + '(\\d+)\\b', 'g');
     this.adrHead = new RegExp('^#{2,4}\\s+' + pc.adrPrefix + '(\\d+)\\b');
@@ -290,7 +294,7 @@ class Gate {
       if (code || doc) {
         const um = /\bhttps?:\/\/[^\s)>"']+/.exec(l);
         if (um && !this.urlAllow.some((re) => re.test(l))) this.add(code ? 'MEDIUM' : 'LOW', rel, ln, 'url', 'external URL ' + um[0] + (code ? ' in a code comment; cite a tracked copy' : ''));
-        const mp = /\b[A-Za-z]:[\\/](?:Users|home|DGB|Program Files|Qt|dev|src|work|proj|projects)\b|\/home\/[A-Za-z0-9_]+\/|\/Users\/[A-Za-z0-9_]+\/|%USERPROFILE%|\$env:USERPROFILE/.exec(l);
+        const mp = this.machinePathRe.exec(l);
         if (mp && !this.pathAllow.some((re) => re.test(l))) this.add('MEDIUM', rel, ln, 'machine-path', 'machine-local path "' + mp[0] + '"');
       }
       if (!isAdr) {

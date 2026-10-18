@@ -1,6 +1,6 @@
 # Pack docs-spec-driven
 
-The spec-driven documentation regime of the NichirinLaserMark project, made generic: the
+The spec-driven documentation regime of a Qt application project, made generic: the
 repository carries its own record (specs with stable requirement IDs, one tracked decision
 file cited as `ADR Dn`, one backlog `BL-nnn`, a changelog, plan history), the spec delta is
 reviewed before code, plan phases live only under `docs/history/`, code comments cite only
@@ -44,6 +44,7 @@ checkable part. Install with `node install.js --target <project> --packs docs-sp
     "exemptPaths": ["LICENSE*", "NOTICE*", "COPYING*", "*.license", "*.min.js"],
     "urlAllow": ["xmlns", "DOCTYPE", "SPDX-License", "schemas.", "w3.org"],
     "machinePathAllow": [],
+    "machinePathRoots": [],
     "extraPhaseWords": [],
     "codeExtensions": [".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".hxx", ".inl", ".py", ".js", ".ts", ".cs", ".java", ".go", ".rs", ".cmake", ".pro", ".pri", ".ps1", ".bat", ".sh", ".ui", ".qss", ".qrc"],
     "docExtensions": [".md", ".rst", ".adoc", ".txt"]
@@ -52,7 +53,8 @@ checkable part. Install with `node install.js --target <project> --packs docs-sp
 ```
 
 `urlAllow`, `machinePathAllow` and `extraPhaseWords` are regular expressions matched against
-the line. The requests directory must be excluded through `.git/info/exclude` (never the
+the line; `machinePathRoots` adds the owner's own drive-letter root folders (such as the
+folder every project lives under) to the machine-path check. The requests directory must be excluded through `.git/info/exclude` (never the
 tracked `.gitignore`); `install.js --add-exclude` only handles `.claude`.
 
 ## Setting up a project
@@ -85,6 +87,6 @@ tracked `.gitignore`); `install.js --add-exclude` only handles `.claude`.
 
 ## Origin
 
-Rules and workflow project-written (NichirinLaserMark, 2026-10); the decision-record
+Rules and workflow project-written (2026); the decision-record
 workflow adapts the ECC `architecture-decision-records` skill (MIT) to a single tracked
 file. No third-party text is copied verbatim.

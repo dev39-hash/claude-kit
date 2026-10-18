@@ -8,7 +8,7 @@ paths:
 ---
 # C++ / Qt coding style (pack cpp-qmake-qt)
 
-> Adapted from the ncr_picking and NichirinLaserMark rules (ECC rules/cpp, MIT, adapted).
+> Adapted from the rules of two earlier Qt projects (ECC rules/cpp, MIT, adapted).
 > Match the surrounding code first; `.claude/project/rules.md` names the language level, the
 > Qt version, the namespace and the naming convention, and wins over this file.
 
