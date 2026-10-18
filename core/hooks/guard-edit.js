@@ -2,9 +2,11 @@
 // PreToolUse hook, matcher: Edit|Write|MultiEdit|NotebookEdit.
 // Driven by .claude/kit.config.json:
 //   deny - edits under paths.readOnly;
-//          edits of kit-managed files (.claude/core/, .claude/packs/, .claude/hooks/, the memory
-//          mirror): improvements go to the kit and are re-installed; the mirror is written by the
-//          Stop hook only;
+//          edits of kit-managed files: .claude/core/, .claude/packs/, .claude/hooks/ always, plus
+//          every path .claude/kit.manifest.json lists (the activated copies under .claude/rules/,
+//          agents/, skills/, commands/, tools/, references/); improvements go to the kit and are
+//          re-installed; project-written files in those folders stay editable; the memory mirror
+//          is written by the Stop hook only;
 //          a file named in paths.forbiddenTreeFiles (CLAUDE.md, AGENTS.md, AGENT.md) anywhere in
 //          the project outside .claude/;
 //          a non-ASCII character written into a file the ASCII rule covers (encoding.*).
@@ -12,9 +14,19 @@
 // Files outside the project are not this hook's business. Any internal error allows the edit.
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const { run } = require('./lib/io');
 const config = require('./lib/config');
 const P = require('./lib/paths');
+
+// Paths install.js wrote (kit.manifest.json "files"), lower-cased with forward slashes.
+function managedPaths(rootFs) {
+  try {
+    const m = JSON.parse(fs.readFileSync(path.join(rootFs, '.claude', 'kit.manifest.json'), 'utf8'));
+    return new Set((m.files || []).map((f) => String(f).replace(/\\/g, '/').toLowerCase()));
+  } catch (_) { return new Set(); }
+}
 
 function main(input, d) {
   const ti = input.tool_input || {};
@@ -38,11 +50,12 @@ function main(input, d) {
     d.deny(target + ' is the read-only memory mirror. Edit the real memory under ~/.claude/projects/<project>/memory/; ' +
       'the sync-memory Stop hook copies it here.');
   }
-  for (const k of ['.claude/core', '.claude/packs', '.claude/hooks']) {
-    if (P.under(rel, k)) {
-      d.deny(target + ' is kit-managed (' + k + '/): never edited inside a project. Change the kit and re-run ' +
-        'install.js --update; project-specific rules go to .claude/project/rules.md.');
-    }
+  let kitManaged = null;
+  for (const k of ['.claude/core', '.claude/packs', '.claude/hooks']) if (P.under(rel, k)) kitManaged = k + '/';
+  if (!kitManaged && inClaude && managedPaths(rootFs).has(rel)) kitManaged = 'activated copy, listed in .claude/kit.manifest.json';
+  if (kitManaged) {
+    d.deny(target + ' is kit-managed (' + kitManaged + '): never edited inside a project; the next install.js --update ' +
+      'would overwrite it. Change the kit and re-run install.js --update; project-specific rules go to .claude/project/rules.md.');
   }
   if (rel === '.claude/settings.json' || rel === '.claude/kit.config.json') {
     d.ask(target + ' configures the hooks and the kit; confirm the change with the human first.');

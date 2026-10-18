@@ -35,6 +35,7 @@ this session, and the `change-impact` skill for anything cross-module. Fill the 
 | Verification commands | copied from `project/context.md` / `build-env.md`, never from memory |
 | Out of scope | what not to do |
 | Build | slot or worktree, config, options (`build.isolation`) |
+| Baseline | the base commit the diff is taken against; for a change git does not see (`.claude/` only, untracked files) the scratchpad folder where you copy the touch-list files at Gate 1, so `/review` and the verification loop have something to diff |
 | Model | workers `models.worker`, reviewer `models.reviewer` |
 
 ## 3. Gate 1
@@ -42,6 +43,8 @@ this session, and the `change-impact` skill for anything cross-module. Fill the 
 Present the Plan to the human (`project.leadTitle`). Record the approval verbatim with date
 and conditions in **Gate 1 approval**. Nothing is spawned before that line is filled, unless
 `project/rules.md` delegates Gate 1 for this class and the case is inside the delegation.
+Right after the approval take the **Baseline** (base commit, or the scratchpad copy of the
+touch-list files when git will not see the change).
 
 ## 4. Pipeline
 
@@ -63,8 +66,10 @@ worktree; tasks that share a file run in sequence.
 
 A tester FAIL or reviewer BLOCK returns to you. Re-spawn the implementer with the report
 quoted; re-enter at the failed step. A reviewer WARN is your decision: fix or accept with a
-reason in **Leader verify**. Two consecutive FAILs on the same step: stop and consult the
-human.
+reason in **Leader verify**. The reviewer returns its verdict block to you (it cannot write):
+paste it into **Review verdict** unchanged. Two consecutive FAILs on the same step: stop and
+consult the human. A Gate 2 answer that changes the deliverable re-enters per `WORKFLOW.md`
+(Rework loops) and is recorded in `.claude/docs/decisions.md`.
 
 ## 6. Completion contract
 
@@ -73,5 +78,6 @@ human.
 3. Walk `.claude/project/definition-of-done.md`.
 4. Gate 2: show the diff summary and the task file; commit only after the approval line is
    filled, exactly per `.claude/rules/01-git-identity.md` and `project/rules.md`.
-5. Close: move the file to `tasks/done/`, distill `docs/decisions.md` / `lessons.md`, update
-   `project/context.md` and `docs/plan/` when they drifted, release slots, stop processes.
+5. Close: move the file to `.claude/tasks/done/`, distill `.claude/docs/decisions.md` /
+   `lessons.md`, update `.claude/project/context.md` and `.claude/docs/plan/` when they
+   drifted, release slots, stop processes.

@@ -8,7 +8,7 @@
 |---|---|---|---|---|---|
 | `full` *(default)* | Any change to source code, build wiring or tests | yes when behaviour is specifiable up front | yes | required | required |
 | `fix` | A bug with a reproduction; behaviour change is the fix only | yes (regression test first) | yes | required | required |
-| `docs` | Documentation or comment-only changes; no behaviour can change | no | yes | skip | required |
+| `docs` | Documentation or comment-only changes; no behaviour can change | no | yes; the leader may do it when the change stays under `.claude/` or is a few lines (say so in the Plan) | skip | required |
 | `trivial` | Typo or whitespace in docs; mechanical rename with zero logic | no | leader may do it | skip | skip |
 | `spike` | Throwaway investigation; nothing merges | no | yes (scratch only) | skip | skip; output is a note in `.claude/docs/notes/` |
 | `hil` | Anything touching real hardware or a gated environment | per `full` | yes | required (hardware part may be `unverifiable here`) | required; human hardware prep confirmed **before** Gate 1 |

@@ -41,7 +41,8 @@ intake -> plan -> [GATE 1: human] -> (tester RED) -> implement -> test -> review
    acceptance criteria, out of scope, build line, model line) and the class. Changes that
    need an ADR get it first (`architecture-decision-records` skill).
 3. **Gate 1.** Human approves or edits the plan. Leader records the approval verbatim (date,
-   conditions).
+   conditions) and fixes the **Baseline**: the base commit, or, when git will not see the
+   change (`.claude/` only), a copy of the touch-list files in the session scratchpad.
 4. **Tester RED** (classes that call for TDD). Leader spawns `tester` in RED mode: failing
    tests for the acceptance criteria, evidence that they fail for the intended reason.
 5. **Implement.** Leader spawns `implementer` with the task file path and nothing else about
@@ -50,9 +51,10 @@ intake -> plan -> [GATE 1: human] -> (tester RED) -> implement -> test -> review
 6. **Test.** Leader spawns `tester` in GREEN-verify mode (unless the class skips it). Tester
    reads the Plan before the Dev notes, verifies every criterion by running something, fills
    **Test report** with `PASS` / `FAIL`. FAIL -> back to implement with the report quoted.
-7. **Review.** Leader spawns `reviewer` (unless the class skips it) on the diff. Reviewer
-   fills **Review verdict** `APPROVE` / `WARN` / `BLOCK`. BLOCK -> back to implement.
-   WARN -> leader decides.
+7. **Review.** Leader spawns `reviewer` (unless the class skips it) on the diff against the
+   Baseline. The reviewer returns the **Review verdict** block (`APPROVE` / `WARN` / `BLOCK`);
+   it has no Write/Edit tool, so the leader pastes the block into the task file unchanged.
+   BLOCK -> back to implement. WARN -> leader decides.
 8. **Leader verify.** Leader runs the project's verification loop itself (whole-tree build,
    full tests, gates, format if configured) and records the result in **Leader verify**.
 9. **Gate 2.** Human reviews the diff summary and the task file. On approval the leader
@@ -69,6 +71,11 @@ the implementer with the failing report quoted in the prompt. After the fix the 
 at the step that failed (test re-runs before review; a review BLOCK re-enters at implement,
 then test runs again when the class needs it). Two consecutive FAILs on the same step ->
 the leader stops and consults the human.
+
+A **Gate 2 answer that changes the deliverable** (not the wording) is a ruling: the leader
+records it in `.claude/docs/decisions.md`, re-enters at implement with the ruling quoted, and
+test and review run again as the class requires before Gate 2 is asked again. A wording-only
+change the leader may make directly and note in **Commit record**.
 
 ## Parallel tasks
 

@@ -1,5 +1,5 @@
 ---
-description: Spawn the read-only reviewer on a task's diff (or on named files / a diff range) with the reviewer model; it fills the Review verdict section with APPROVE / WARN / BLOCK. Reports only, never edits.
+description: Spawn the read-only reviewer on a task's diff (or on named files / a diff range) with the reviewer model; it returns the Review verdict block (APPROVE / WARN / BLOCK), which the leader pastes into the task file. Reports only, never edits.
 argument-hint: "[T-xxx | file paths | <base>..<head> | blank = uncommitted changes]"
 ---
 
@@ -12,7 +12,7 @@ Leader only. Spawn the `reviewer` agent with `model: <models.reviewer>` (from
 
 | Argument | What the reviewer gets |
 |---|---|
-| `T-xxx` | the task file path; it reads the Plan, then the diff of the touch list |
+| `T-xxx` | the task file path; it reads the Plan, then the diff of the touch list against the Plan's **Baseline** (base commit, or the scratchpad copy for `.claude/`-only changes) |
 | file paths | those files and their callers |
 | `<base>..<head>` | that diff range |
 | blank | `git diff` and `git diff --staged` |
@@ -27,9 +27,10 @@ silent-failure hunter when the pack provides one, and merge the findings.
 
 ## Output
 
-The reviewer fills **Review verdict** in the task file: scope, findings `[BLOCK|HIGH|MEDIUM|LOW]
+The reviewer returns the **Review verdict** block: scope, findings `[BLOCK|HIGH|MEDIUM|LOW]
 file:line - what - scenario - fix (confirmed | suspected)`, report claims checked /
-contradicted / not checkable, checked / not checked, verdict `APPROVE | WARN | BLOCK`.
+contradicted / not checkable, checked / not checked, verdict `APPROVE | WARN | BLOCK`. It has
+no Write/Edit tool: you paste the block into the task file unchanged before acting on it.
 
 ## Then
 

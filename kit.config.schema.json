@@ -333,7 +333,7 @@
           "items": {
             "type": "string"
           },
-          "description": "If any of these is running, a test suite must wait.",
+          "description": "Process names or globs (for example *_test.exe) that must not be running when a test suite starts; the tester and the leader check the process list before every suite run (no hook enforces this). Without .exe.",
           "default": [
             "cl",
             "link",
