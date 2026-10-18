@@ -17,6 +17,7 @@
 - **Verification commands:** <build, test, gate; copied from project/context.md or build-env.md>
 - **Out of scope:** <explicitly not this task>
 - **Build:** <slot or worktree, config, extra options>
+- **Baseline:** <base commit; or, for a change git does not see, the scratchpad copy of the touch-list files taken at Gate 1>
 - **Model:** workers <models.worker>, reviewer <models.reviewer>; pass it on every spawn
 - **ADR:** <ADR-NNNN or "not needed because ...">
 - **Gate 1 approval:** <date, by whom, conditions - empty means NOT approved>
@@ -46,7 +47,7 @@
 - New tests added:
 - **Verdict:** PASS / FAIL
 
-## Review verdict  *(reviewer writes - skipped only if Class says so)*
+## Review verdict  *(reviewer returns the block, leader pastes it unchanged - skipped only if Class says so)*
 
 - Scope:
 - Findings ([BLOCK|HIGH|MEDIUM|LOW] file:line - what - scenario - fix - confirmed/suspected):

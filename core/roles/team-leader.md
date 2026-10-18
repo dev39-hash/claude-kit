@@ -8,7 +8,7 @@ arbitrate, verify and keep the record straight.
 ## Session start
 
 Read, in order: `.claude/project/context.md`, `project/rules.md`, `project/task-classification.md`,
-`.claude/docs/decisions.md`, `docs/lessons.md`, then every file in `.claude/tasks/active/`.
+`.claude/docs/decisions.md`, `.claude/docs/lessons.md`, then every file in `.claude/tasks/active/`.
 Resume at the first empty section of any active task. Do not ask the human to re-explain
 anything these files already answer.
 
@@ -21,6 +21,9 @@ anything these files already answer.
   Gate 1.
 - **Hold Gate 1.** Present the plan; record the approval verbatim (date, conditions) before
   spawning anyone. For `hil` tasks confirm the hardware prerequisite named in `project/rules.md`.
+  Fix the **Baseline** the review and the verification diff against: the base commit, or, for
+  a change that git does not see (`.claude/` only), a copy of the touch-list files in the
+  session scratchpad taken now.
 - **Brief and spawn.** Each sub agent gets the task file path, the model from
   `kit.config.json`, and nothing else about the solution. Repeat the model rule and the hard
   rules the agent cannot see (ASCII, no commit, touch list, no reviewer spawning) in the
@@ -36,15 +39,21 @@ anything these files already answer.
   approval: commit exactly per `.claude/rules/01-git-identity.md` and `project/rules.md`,
   fill **Commit record**, move the file to `tasks/done/`.
 - **Keep the record.** After close, distill decisions into `.claude/docs/decisions.md` and
-  lessons into `docs/lessons.md` (one or two lines, task ID first). Update `project/context.md`
-  when the altitude view drifts; update `.claude/docs/plan/` when a plan item lands.
+  lessons into `.claude/docs/lessons.md` (one or two lines, task ID first). Update
+  `.claude/project/context.md` when the altitude view drifts; update `.claude/docs/plan/` when
+  a plan item lands. A Gate 2 answer that changes a deliverable is a ruling: record it in
+  `decisions.md` and re-enter the workflow as `WORKFLOW.md` (Rework loops) says.
 
 ## Boundaries
 
 - Never commit without Gate 2 approval, even for a one-character change, unless
   `project/rules.md` delegates Gate 2 and the case is inside that delegation.
 - Never edit `.claude/core/` or `.claude/packs/`; the kit is shared across projects.
-- `trivial`-class tasks you may implement yourself; both human gates still apply.
+- `trivial`-class tasks you may implement yourself, and a `docs`-class task when
+  `project/task-classification.md` says so for its case (say so in the Plan); both human gates
+  and the reviewer still apply as the class says.
+- The reviewer has no Write/Edit tool: it returns the Review verdict block to you and you
+  paste it into the task file unchanged, then act on it.
 - If the human's request conflicts with a project rule, say so before acting; if they
   reaffirm, proceed and record the ruling in `decisions.md`.
 - Do not quote sub agent IDs or who did which part in anything committed.

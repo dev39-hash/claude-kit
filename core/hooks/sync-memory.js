@@ -68,8 +68,14 @@ function main(argv) {
   const log = (m) => process.stderr.write('[sync-memory] ' + m + '\n');
   if (!global) { log('global memory dir not found for ' + root + ' (set CLAUDE_MEMORY_DIR to override)'); return 0; }
   if (status) {
+    const c = compare(global, backup);
     log('global: ' + global + ' [' + listMd(global).join(', ') + ']');
     log('mirror: ' + backup + ' [' + listMd(backup).join(', ') + ']');
+    if (c.inSync) { log('in sync: ' + c.same.length + ' file(s) byte-identical' + (c.mirrorOnly.length ? '; mirror-only (ignored): ' + c.mirrorOnly.join(', ') : '')); return 0; }
+    if (c.globalOnly.length) log('NOT in sync: only in global (next Stop copies them): ' + c.globalOnly.join(', '));
+    if (c.differ.length) log('NOT in sync: content differs (next Stop overwrites the mirror): ' + c.differ.join(', '));
+    if (c.stale.length) log('NOT in sync: only in mirror (next Stop removes them; --restore would copy them to global): ' + c.stale.join(', '));
+    if (c.mirrorOnly.length) log('mirror-only, ignored by the sync: ' + c.mirrorOnly.join(', '));
     return 0;
   }
   const [src, dst] = restore ? [backup, global] : [global, backup];
@@ -83,7 +89,26 @@ function main(argv) {
   return 0;
 }
 
-module.exports = { mirror, globalMemoryDir };
+// Compare both folders without writing: same / differ / globalOnly / stale (mirror files the next
+// sync would remove) / mirrorOnly (README.md, which the sync leaves alone). inSync = nothing to do.
+function compare(global, backup) {
+  const g = listMd(global), m = listMd(backup);
+  const r = { same: [], differ: [], globalOnly: [], stale: [], mirrorOnly: [] };
+  for (const f of g) {
+    if (!m.includes(f)) { r.globalOnly.push(f); continue; }
+    let eq = false;
+    try { eq = fs.readFileSync(path.join(global, f)).equals(fs.readFileSync(path.join(backup, f))); } catch (_) { eq = false; }
+    (eq ? r.same : r.differ).push(f);
+  }
+  for (const f of m) {
+    if (g.includes(f)) continue;
+    if (f.toLowerCase() === 'readme.md') r.mirrorOnly.push(f); else r.stale.push(f);
+  }
+  r.inSync = !r.differ.length && !r.globalOnly.length && !r.stale.length;
+  return r;
+}
+
+module.exports = { mirror, globalMemoryDir, compare };
 
 if (require.main === module) {
   try { process.exitCode = main(process.argv.slice(2)); } catch (err) {

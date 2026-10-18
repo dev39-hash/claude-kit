@@ -8,7 +8,7 @@ documented in `kit.config.schema.json`). Installed into `<project>/.claude/hooks
 | Hook | Event / matcher | Decides | Fails |
 |---|---|---|---|
 | `guard-shell.js` | PreToolUse `Bash\|PowerShell` | deletes, writes into protected paths, git (identity, attribution, staging, push, destructive), process kill/launch, PowerShell writes on code-page machines | open |
-| `guard-edit.js` | PreToolUse `Edit\|Write\|MultiEdit\|NotebookEdit` | read-only paths, kit files, memory mirror, forbidden tree files, ASCII content | open |
+| `guard-edit.js` | PreToolUse `Edit\|Write\|MultiEdit\|NotebookEdit` | read-only paths, kit files (`core/`, `packs/`, `hooks/` and every activated copy listed in `kit.manifest.json`), memory mirror, forbidden tree files, ASCII content | open |
 | `subagent-model-guard.js` | PreToolUse `Agent` | model per role, explicit model, no fork | closed |
 | `format.js` | PostToolUse `Edit\|Write\|MultiEdit` | runs the formatter only when the repo has a formatter config | never blocks |
 | `sync-memory.js` | Stop (also CLI: `--restore`, `--dry-run`, `--status`) | mirrors Claude's global memory into `paths.memoryMirror` | never blocks |

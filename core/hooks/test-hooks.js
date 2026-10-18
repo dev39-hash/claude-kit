@@ -55,6 +55,11 @@ const CONFIG = {
   encoding: { codePage: 'cp932', asciiExempt: ['*.ts', '3rdparty/', 'components/'] },
 };
 fs.writeFileSync(path.join(P, '.claude', 'kit.config.json'), JSON.stringify(CONFIG, null, 2));
+// what install.js would have written: the activated copies are kit-managed, project files are not
+fs.writeFileSync(path.join(P, '.claude', 'kit.manifest.json'), JSON.stringify({ files: [
+  '.claude/core/rules/00-roles-and-models.md', '.claude/rules/00-roles-and-models.md', '.claude/rules/cpp-qmake-qt/qt-testing.md',
+  '.claude/agents/reviewer.md', '.claude/skills/tdd-workflow/SKILL.md', '.claude/commands/plan.md', '.claude/hooks/guard-shell.js',
+  '.claude/tools/cpp-cmake-gtest/build.js', '.claude/references/definition-of-done.md'] }, null, 2));
 
 // ---- runner --------------------------------------------------------------------------------
 function runHook(hook, toolInput, cwd, toolName) {
@@ -268,6 +273,17 @@ const cases = [
   edit(PS + '/.claude/memory/MEMORY.md', 'x', 'deny'),
   edit(PS + '/.claude/core/rules/00-roles-and-models.md', 'x', 'deny'),
   edit(PS + '/.claude/hooks/guard-shell.js', 'x', 'deny'),
+  edit(PS + '/.claude/rules/00-roles-and-models.md', 'x', 'deny'),
+  edit(PS + '/.claude/rules/cpp-qmake-qt/qt-testing.md', 'x', 'deny'),
+  edit(PS + '/.claude/agents/reviewer.md', 'x', 'deny'),
+  edit(PS + '/.claude/skills/tdd-workflow/SKILL.md', 'x', 'deny'),
+  edit(PS + '/.claude/commands/plan.md', 'x', 'deny'),
+  edit(PS + '/.claude/tools/cpp-cmake-gtest/build.js', 'x', 'deny'),
+  edit(PS + '/.claude/references/definition-of-done.md', 'x', 'deny'),
+  edit(PS + '/.claude/rules/legacy-style.md', 'x', 'allow'),
+  edit(PS + '/.claude/agents/my-own-agent.md', 'x', 'allow'),
+  edit(PS + '/.claude/skills/project-skill/SKILL.md', 'x', 'allow'),
+  edit('.claude/rules/00-roles-and-models.md', 'x', 'deny'),
   edit(PS + '/.claude/settings.json', 'x', 'ask'),
   edit(PS + '/.claude/kit.config.json', 'x', 'ask'),
   edit(PS + '/.claude/docs/plan/x.md', 'x', 'allow'),
@@ -368,6 +384,18 @@ unit('sync-memory mirrors and removes, restore never removes', () => {
   r = sync.mirror(g, m, { dry: true });
   assert.deepStrictEqual(r.copied, ['newer.md']);
   assert.ok(!fs.existsSync(path.join(m, 'newer.md')));
+});
+unit('sync-memory compare reports in sync, stale, differing and mirror-only files', () => {
+  const g = path.join(T, 'g3'); const m = path.join(T, 'm3');
+  fs.mkdirSync(g); fs.mkdirSync(m);
+  fs.writeFileSync(path.join(g, 'MEMORY.md'), 'idx'); fs.writeFileSync(path.join(m, 'MEMORY.md'), 'idx');
+  fs.writeFileSync(path.join(m, 'README.md'), 'about the mirror');
+  let c = sync.compare(g, m);
+  assert.ok(c.inSync); assert.deepStrictEqual(c.mirrorOnly, ['README.md']);
+  fs.writeFileSync(path.join(g, 'a.md'), 'a'); fs.writeFileSync(path.join(m, 'stale.md'), 'old'); fs.writeFileSync(path.join(m, 'MEMORY.md'), 'changed');
+  c = sync.compare(g, m);
+  assert.ok(!c.inSync);
+  assert.deepStrictEqual(c.globalOnly, ['a.md']); assert.deepStrictEqual(c.stale, ['stale.md']); assert.deepStrictEqual(c.differ, ['MEMORY.md']);
 });
 unit('sync-memory refuses a source without MEMORY.md', () => {
   const g = path.join(T, 'g2'); const m = path.join(T, 'm2');

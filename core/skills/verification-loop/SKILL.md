@@ -54,9 +54,17 @@ exists. Otherwise `SKIPPED (<tool> missing)`. Findings are listed, not fixed her
 purity). Also: `git grep -I -nP "[^\x00-\x7F]"` over the ASCII-covered files; a docs grep for
 `.claude`, `Claude`, `agent`, phase names, absolute paths under `paths.docsGateRoots`.
 
+**Diff-only form.** On a project with pre-existing findings (an old code base, a tracked docs
+regime that uses phase names on purpose) the whole-tree grep is red by construction. Then:
+run the greps over the added lines only (`git diff -U0 <baseline>..HEAD | grep '^+'`, or the
+touch-list files against the Plan's Baseline copy), record the whole-tree count once in
+`project/build-env.md` as the known debt, and FAIL only on new findings. The report line
+says both: `Gates: PASS (0 new; debt n)`.
+
 ## Phase 7: Diff review
 
-`git status --short` and `git diff --stat` (or `--name-status <base>..HEAD`): every path on
+`git status --short` and `git diff --stat` (or `--name-status <baseline>..HEAD`; for a
+`.claude/`-only change, `diff -ru <scratchpad baseline copy> <touch-list files>`): every path on
 the task's touch list; nothing under "Must not touch"; no temp code, debug output, injected
 negative checks, build output, machine paths, `CLAUDE.md`/`AGENTS.md`; public symbols
 documented; module README / CHANGELOG updated with the behaviour. Try a negative check where
@@ -72,7 +80,7 @@ Tests:      PASS | FAIL (<passed>/<total>, <skipped> skipped; shape check <f> = 
 Goldens:    PASS | FAIL | N/A
 Format:     PASS | FAIL | SKIPPED (<tool>)
 Static:     PASS | FAIL | SKIPPED (<tool>)
-Gates:      PASS | FAIL | N/A
+Gates:      PASS | FAIL | N/A   (diff-only form: PASS (0 new; debt <n>))
 Diff:       <n> files; touch list clean | <unlisted files>
 Negative:   <test shown red, restored how> | not needed because <...>
 Overall:    READY | NOT READY for Gate 2

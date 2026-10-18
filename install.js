@@ -119,13 +119,17 @@ class Installer {
     const file = path.join(this.claude, 'kit.config.json');
     let cfg = null;
     if (this.exists(file)) {
-      try { cfg = JSON.parse(fs.readFileSync(file, 'utf8').replace(new RegExp('^' + String.fromCharCode(0xFEFF)), '')); } catch (e) { throw new Error('kit.config.json is not valid JSON: ' + e.message); }
-      const packs = new Set((cfg.packs || []).concat(this.o.packs));
-      cfg.packs = [...packs];
-      if (this.o.name && !cfg.project.name) cfg.project.name = this.o.name;
-      cfg.kitVersion = KIT_VERSION;
-      if (cfg.packs.includes('hooks-powershell')) cfg.hooks = Object.assign({}, cfg.hooks || {}, { runtime: 'powershell' });
-      this.writeFile(file, JSON.stringify(cfg, null, 2) + '\n', { overwrite: true });
+      // keep the project's file as written (it may be a hand-written subset); work on the merged view
+      let raw;
+      try { raw = JSON.parse(fs.readFileSync(file, 'utf8').replace(new RegExp('^' + String.fromCharCode(0xFEFF)), '')); } catch (e) { throw new Error('kit.config.json is not valid JSON: ' + e.message); }
+      if (!raw || typeof raw !== 'object') throw new Error('kit.config.json must hold a JSON object');
+      raw.packs = [...new Set((raw.packs || []).concat(this.o.packs))];
+      raw.project = raw.project || {};
+      if (this.o.name && !raw.project.name) raw.project.name = this.o.name;
+      raw.kitVersion = KIT_VERSION;
+      if (raw.packs.includes('hooks-powershell')) raw.hooks = Object.assign({}, raw.hooks || {}, { runtime: 'powershell' });
+      this.writeFile(file, JSON.stringify(raw, null, 2) + '\n', { overwrite: true });
+      cfg = require(path.join(KIT, 'core', 'hooks', 'lib', 'config.js')).merge(JSON.parse(JSON.stringify(DEFAULTS)), raw);
     } else {
       cfg = JSON.parse(JSON.stringify(DEFAULTS));
       cfg.kitVersion = KIT_VERSION;
@@ -232,6 +236,7 @@ class Installer {
       }
       if (f.permissions && f.permissions.allow) tpl.permissions.allow = tpl.permissions.allow.concat(f.permissions.allow);
     }
+    tpl.permissions.allow = [...new Set(tpl.permissions.allow)];
     let out = tpl;
     if (this.exists(file) && !this.o.force) {
       // keep the user's own permissions and any hook entry that is not kit-managed
@@ -267,7 +272,10 @@ class Installer {
     this.writeFile(path.join(this.claude, 'docs', 'adr', 'README.md'),
       '# Architecture decision records\n\nNot tracked in git. Format and workflow: the `architecture-decision-records` skill.\n' +
       'Copy `template.md` to `NNNN-short-title.md`, then add a row here.\n\n| ADR | Title | Status | Date |\n|---|---|---|---|\n');
-    for (const d of ['docs/plan', 'docs/briefs', 'docs/notes', 'tasks/active', 'tasks/done', 'memory', 'scratch']) this.mkdir(path.join(this.claude, d));
+    for (const d of ['docs/plan', 'docs/briefs', 'docs/notes', 'tasks/active', 'tasks/done', 'scratch']) this.mkdir(path.join(this.claude, d));
+    // the memory mirror lives where paths.memoryMirror says (default .claude/memory)
+    const mirror = String((this.cfg.paths && this.cfg.paths.memoryMirror) || '.claude/memory').replace(/\\/g, '/').replace(/\/+$/, '');
+    this.mkdir(path.resolve(this.target, mirror));
   }
 
   writeClaudeMd() {
@@ -330,7 +338,17 @@ class Installer {
       execFileSync(git, ['check-ignore', '-q', '.claude'], { cwd: this.target, stdio: 'ignore' });
       ignored = true;
     } catch (_) { ignored = false; }
-    if (ignored) { this.note('.claude/ is ignored by git'); return; }
+    if (ignored) {
+      this.note('.claude/ is ignored by git');
+      // rule 02: the repo carries no trace of the agent workspace; the ignore belongs in the global gitignore
+      const gi = path.join(this.target, '.gitignore');
+      try {
+        if (this.exists(gi) && fs.readFileSync(gi, 'utf8').split(/\r?\n/).some((l) => /^\s*\/?\.claude\/?\s*(#.*)?$/.test(l))) {
+          this.note('WARNING: the tracked .gitignore lists .claude/; rule 02-repo-hygiene keeps the agent workspace out of tracked text. Prefer the global gitignore (or .git/info/exclude) and drop that line in a docs-class task.');
+        }
+      } catch (_) { /* unreadable .gitignore: nothing to say */ }
+      return;
+    }
     if (this.o.addExclude) {
       const ex = path.join(gitDir, 'info', 'exclude');
       if (!this.o.dry) { fs.mkdirSync(path.dirname(ex), { recursive: true }); fs.appendFileSync(ex, (this.exists(ex) && !fs.readFileSync(ex, 'utf8').endsWith('\n') ? '\n' : '') + '.claude/\n'); }

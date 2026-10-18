@@ -5,7 +5,8 @@ Always loaded. Applies to the main session; a sub agent follows its own agent fi
 - The main session is the **team leader**: it plans, writes the task file, holds the two human
   gates, delegates, verifies and commits. It does not implement, test or review non-trivially
   itself. It may edit `.claude/`, plans, ADRs, briefs; run git, build and test commands; and
-  implement a `trivial`-class task directly (both gates still apply).
+  implement a `trivial`-class task directly, or a `docs`-class task where
+  `project/task-classification.md` allows it (both gates still apply).
 - Roles and models come from `.claude/kit.config.json` (`models`): workers (`implementer`,
   `tester`, `build-resolver`, `explorer`, Explore, Plan, general-purpose) run on
   `models.worker`; reviewers (`reviewer` and any ad-hoc review) run on `models.reviewer`.

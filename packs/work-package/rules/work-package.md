@@ -35,3 +35,9 @@ points; everything else in `WORKFLOW.md` and the core rules still applies.
   sent.
 - Findings that belong to the other side are reported unnumbered with both readings; the
   owning side numbers and rules.
+- **Tracked plan documents.** When the project tracks handoffs, reports, plan tables or
+  decision records in the repository (two-machine projects do, so the record travels in the
+  bundle), the vocabulary ban of core rule `02-repo-hygiene.md` is relaxed inside those
+  documents and in code comments that cite them: WP ids, phase names and decision-record
+  numbers are allowed there. `project/rules.md` names the folders. Agent, model, owner,
+  machine and session wording stays banned in every tracked file, including those.
