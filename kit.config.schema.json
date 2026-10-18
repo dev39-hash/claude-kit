@@ -353,6 +353,31 @@
         }
       }
     },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Persistent (user or machine scope) environment variable writes from a shell: setx, [Environment]::SetEnvironmentVariable(name, value, User|Machine), the HKCU/HKLM Environment registry keys. Process-scope writes ($env:X, set X=) are never checked.",
+      "properties": {
+        "persistentWrites": {
+          "type": "string",
+          "enum": [
+            "ask",
+            "deny",
+            "allow"
+          ],
+          "description": "Decision for a persistent write of a variable not listed in protectedVars.",
+          "default": "ask"
+        },
+        "protectedVars": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Variable names or globs (BINPICK_*, PATH) whose persistent writes are denied; case-insensitive. A write whose name the guard cannot read asks.",
+          "default": []
+        }
+      }
+    },
     "encoding": {
       "type": "object",
       "additionalProperties": false,

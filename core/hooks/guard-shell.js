@@ -20,7 +20,11 @@
 //           the project (Claude's temp and scratchpad excepted), of paths.localOnly, or of a
 //           target that cannot be resolved statically; edits of paths.askBeforeEdit;
 //           in-place rewrites (sed -i, perl -i) of a project file outside the temp and build
-//           folders, which lose CRLF and encoding (use the Edit tool).
+//           folders, which lose CRLF and encoding (use the Edit tool);
+//           a persistent environment variable write (setx, [Environment]::SetEnvironmentVariable
+//           with a User or Machine target, HKCU/HKLM Environment registry keys), which outlives
+//           the session (environment.persistentWrites); a name in environment.protectedVars
+//           is denied, a name the guard cannot read asks.
 //   allow - everything else; no output is written (the normal permission flow continues).
 //
 // Commands are tokenised like a shell (quotes, ; && || |, redirections, heredocs, here-strings)
@@ -559,6 +563,87 @@ class Guard {
     if (hit) this.d.deny('never launch ' + (this.cfg.processes.neverLaunch || []).join(', ') + ' (processes.neverLaunch): the human runs them.');
   }
 
+  // HKCU\Environment, HKLM\...\Session Manager\Environment, with or without the PowerShell drive
+  // colon; the bash tokeniser may have eaten the backslash, so the separator is optional.
+  isEnvRegistryKey(s) {
+    const n = String(s || '').replace(/["']/g, '').replace(/[\\:]+/g, '/');
+    return /^(hkcu|hklm|hkey_current_user|hkey_local_machine)\/*(.*)environment\/*$/i.test(n);
+  }
+
+  // K19: a persistent environment variable (setx, [Environment]::SetEnvironmentVariable with a
+  // User or Machine target, the HKCU/HKLM Environment registry keys) outlives the session and
+  // changes the human's build environment for every tool on the machine. A name matched by
+  // environment.protectedVars is denied; every other persistent write follows
+  // environment.persistentWrites; a name or a target the guard cannot read asks. Process-scope
+  // writes ($env:X, set X=, a two-argument SetEnvironmentVariable) are not checked.
+  envWrite(name, args, c) {
+    let varName = null;
+    let scope = null;
+    let how = '';
+    const joined = c.words.join(' ');
+    const k = joined.search(/\[(?:system\.)?environment\]::setenvironmentvariable\(/i);
+    if (k >= 0) {
+      const open = joined.indexOf('(', k);
+      const close = joined.lastIndexOf(')');
+      const inner = joined.slice(open + 1, close > open ? close : undefined);
+      const parts = inner.split(',').map((s) => s.trim().replace(/^["']|["']$/g, ''));
+      if (parts.length < 3) return;
+      const t = parts[parts.length - 1].replace(/^\[(?:system\.)?environmentvariabletarget\]::/i, '');
+      if (/^process$/i.test(t)) return;
+      scope = /^(user|machine)$/i.test(t) ? t.toLowerCase() : 'unknown';
+      varName = parts[0];
+      how = '[Environment]::SetEnvironmentVariable';
+    } else if (name === 'setx') {
+      scope = 'user';
+      const pos = [];
+      for (let i = 0; i < args.length; i++) {
+        const a = args[i];
+        if (/^\/m$/i.test(a)) { scope = 'machine'; continue; }
+        if (/^\/[supkfd]$/i.test(a)) { i++; continue; }
+        if (/^\/[arx]$/i.test(a)) continue;
+        pos.push(a);
+      }
+      varName = pos[0] || null;
+      how = 'setx';
+    } else if (name === 'reg' && /^add$/i.test(args[0] || '') && this.isEnvRegistryKey(args[1])) {
+      scope = /hklm|local_machine/i.test(args[1]) ? 'machine' : 'user';
+      const v = args.findIndex((a) => /^\/v$/i.test(a));
+      varName = v >= 0 ? args[v + 1] || null : null;
+      how = 'reg add';
+    } else if (/^(set-itemproperty|sp|new-itemproperty|remove-itemproperty|rp|set-item|si|new-item|ni)$/.test(name)) {
+      const p = this.parsePositionals(args, true);
+      const target = p.path[0] || p.positionals[0] || '';
+      if (!this.isEnvRegistryKey(target)) return;
+      scope = /hklm|local_machine/i.test(target) ? 'machine' : 'user';
+      const n = args.findIndex((a) => /^-n(?:ame)?$/i.test(a));
+      varName = n >= 0 ? args[n + 1] || null : null;
+      how = name;
+    } else {
+      return;
+    }
+    if (varName && /[$%`]/.test(varName)) varName = null;
+    const env = this.cfg.environment || {};
+    const prot = env.protectedVars || [];
+    const hit = varName && prot.find((pat) => {
+      const re = new RegExp('^' + String(pat).replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$', 'i');
+      return re.test(varName);
+    });
+    const where = scope === 'machine' ? 'machine' : scope === 'user' ? 'user' : 'a user or machine';
+    if (hit) {
+      this.d.deny(how + ' writes the ' + where + '-scope environment variable ' + varName + ', which is protected (environment.protectedVars "' + hit + '"): ' +
+        'the human owns the build environment. Set it for this process only ($env:NAME) or tell the human.');
+      return;
+    }
+    if (!varName) {
+      this.d.ask(how + ' writes ' + where + '-scope environment variable whose name the guard cannot read; a persistent variable outlives the session. Confirm with the human.');
+      return;
+    }
+    const mode = env.persistentWrites || 'ask';
+    if (mode === 'allow') return;
+    const text = how + ' writes the ' + where + '-scope environment variable ' + varName + ', which outlives this session and changes the build environment of every tool on the machine (environment.persistentWrites). Set it for this process only ($env:NAME) or confirm with the human.';
+    if (mode === 'deny') this.d.deny(text); else this.d.ask(text);
+  }
+
   command(c) {
     const { name, args, redirects } = c;
     for (const w of c.words) {
@@ -577,6 +662,7 @@ class Guard {
     if (/^wmic$/.test(name) && /\bdelete\b/i.test(args.join(' '))) { this.kill('wmic', args, c); return null; }
     if (!c.piped) { this.pendingNeverKill = false; this.lastGetProcessById = false; }
     this.launch(name, args);
+    this.envWrite(name, args, c);
 
     if (RM_VERBS.has(name)) {
       const targets = this.parseDeleteArgs(name, args);

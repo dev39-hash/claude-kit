@@ -19,6 +19,7 @@ $config = @{
     git       = @{ identity = @{ name = ''; email = '' }; deniedEmails = @('denied@example.com'); aiAttribution = 'deny'; forbiddenPhrases = @('WIP junk'); push = 'ask'; forcePush = 'ask-with-lease' }
     paths     = @{ readOnly = @('reference_source/'); localOnly = @('.wt/', 'product_release/'); protectedDelete = @('.git/', '.claude', '.claude/memory/'); memoryMirror = '.claude/memory' }
     processes = @{ neverKill = @('machine_ui', 'machine_runtime'); neverLaunch = @('machine_ui', 'machine_runtime') }
+    environment = @{ persistentWrites = 'ask'; protectedVars = @('MACHINE_*', 'PATH') }
     encoding  = @{ codePage = 'cp932'; asciiExtensions = @('.cpp', '.h', '.pro', '.pri', '.ui', '.ps1') }
 }
 [IO.File]::WriteAllText((Join-Path $P '.claude\kit.config.json'), (ConvertTo-Json $config -Depth 6), (New-Object System.Text.UTF8Encoding $false))
@@ -108,6 +109,19 @@ $cases = @(
     (ShellCase 'echo x > build/log.txt' 'allow' 'PowerShell'),
     (ShellCase 'Get-Content src/a.cpp' 'allow' 'PowerShell'),
     (ShellCase 'echo x > src/a.cpp' 'allow'),
+    # persistent environment variables (K19)
+    (ShellCase '[Environment]::SetEnvironmentVariable("FOO_DIR", "C:/x", "User")' 'ask' 'PowerShell'),
+    (ShellCase '[System.Environment]::SetEnvironmentVariable(''FOO_DIR'', ''C:/x'', [EnvironmentVariableTarget]::Machine)' 'ask' 'PowerShell'),
+    (ShellCase '[Environment]::SetEnvironmentVariable($name, $value, "User")' 'ask' 'PowerShell'),
+    (ShellCase '[Environment]::SetEnvironmentVariable("MACHINE_QT_DIR", "C:/Qt", "User")' 'deny' 'PowerShell'),
+    (ShellCase '[Environment]::SetEnvironmentVariable("MACHINE_QT_DIR", "C:/Qt", "Process")' 'allow' 'PowerShell'),
+    (ShellCase '[Environment]::SetEnvironmentVariable("FOO_DIR", "C:/x")' 'allow' 'PowerShell'),
+    (ShellCase '$env:MACHINE_QT_DIR = "C:/Qt"' 'allow' 'PowerShell'),
+    (ShellCase 'setx FOO_DIR C:/x' 'ask'),
+    (ShellCase 'setx /M MACHINE_QT_DIR C:/Qt' 'deny'),
+    (ShellCase 'Set-ItemProperty -Path HKCU:\Environment -Name FOO_DIR -Value C:/x' 'ask' 'PowerShell'),
+    (ShellCase 'reg add "HKCU\Environment" /v MACHINE_QT_DIR /d C:/Qt /f' 'deny'),
+    (ShellCase 'Get-ItemProperty -Path HKCU:\Environment' 'allow' 'PowerShell'),
     # deletes
     (ShellCase 'rm -rf .git' 'deny'),
     (ShellCase 'Remove-Item -Recurse .claude\memory' 'deny' 'PowerShell'),

@@ -51,6 +51,10 @@ const DEFAULTS = {
     busyBeforeTests: ['cl', 'link', 'nmake', 'jom', 'ninja', 'msbuild'],
     testPorts: [],
   },
+  environment: {
+    persistentWrites: 'ask',
+    protectedVars: [],
+  },
   encoding: {
     asciiExtensions: ['.cpp', '.cc', '.cxx', '.h', '.hpp', '.hh', '.inl', '.ipp', '.ui', '.qrc', '.qss',
       '.pro', '.pri', '.prf', '.cmake', 'CMakeLists.txt', '.bat', '.cmd', '.ps1', '.py', '.js', '.json'],

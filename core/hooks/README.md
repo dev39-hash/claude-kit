@@ -29,6 +29,7 @@ stderr.
 | `git.identity`, `deniedEmails`, `forbiddenPhrases`, `push`, `forcePush`, `gitExe` | guard-shell |
 | `paths.readOnly`, `askBeforeEdit`, `localOnly`, `protectedDelete`, `memoryMirror`, `forbiddenTreeFiles`, `tempRoots` | guard-shell, guard-edit |
 | `processes.neverKill`, `neverLaunch` | guard-shell |
+| `environment.persistentWrites`, `protectedVars` | guard-shell (setx, `[Environment]::SetEnvironmentVariable(.., User\|Machine)`, HKCU/HKLM Environment registry writes; `$env:X` is free) |
 | `encoding.asciiExtensions`, `asciiExempt`, `asciiRepoMarkdown`, `codePage` | guard-edit, guard-shell (PowerShell writes), format |
 | `models.worker`, `reviewer`, `forceAll`, `allowFork` | subagent-model-guard |
 | `build.formatOnEdit`, `buildDirPatterns`, `toolchain.clangFormatExe`, `toolchain.vsRoot` | format |

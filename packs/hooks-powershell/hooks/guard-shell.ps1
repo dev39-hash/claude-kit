@@ -12,7 +12,10 @@
 #          Add-Content, Out-File, Tee-Object, > redirection) into an ASCII source file.
 #   ask  - every other push; remote add / set-url / remove; destructive git (reset --hard,
 #          clean, checkout -- / ., restore, branch -D, rebase, amend, stash drop, tag -d);
-#          kill by name; a delete that names a paths.localOnly location.
+#          kill by name; a delete that names a paths.localOnly location; a persistent
+#          environment variable write (setx, [Environment]::SetEnvironmentVariable with a
+#          User or Machine target, HKCU/HKLM Environment registry keys) unless the name is in
+#          environment.protectedVars (deny) or environment.persistentWrites says otherwise.
 # Regex on the command text, not a tokeniser: nested shells, variables and quoting are not
 # followed (the Node guard does that). Output: PreToolUse JSON deny|ask, exit 0. Any internal
 # error allows the command with a note on stderr (fail open). Pure ASCII file.
@@ -144,6 +147,40 @@ try {
     }
     if (($cmd -match $killVerb) -and -not ($cmd -match '(?i)(\s(/PID|-Id)\s+\d+)|(\bkill\s+(-\d+\s+)?\d+)') -and $script:Denies.Count -eq 0) {
         Ask 'killing a process by name: kill only processes this session started, by PID.'
+    }
+
+    # ---- persistent environment variables (K19) ---------------------------------------------
+    # $envName: $null = no persistent write seen; '' = a write whose name is not a literal.
+    $envName = $null
+    $envHow = ''
+    if ($cmd -match '(?i)(^|[\s;&|(])setx(\.exe)?\s+(/m\s+)?(?<name>[^\s/]\S*)') {
+        $envName = $Matches['name']; $envHow = 'setx'
+    } elseif ($cmd -match '(?i)\[(System\.)?Environment\]::SetEnvironmentVariable\(\s*(?<name>[^,)]*),(?<rest>[^)]*)\)') {
+        $parts = @(([string]$Matches['rest']).Split(','))
+        if ($parts.Count -ge 2) {
+            $target = ($parts[$parts.Count - 1]).Trim().Trim('"', "'") -replace '(?i)^\[(System\.)?EnvironmentVariableTarget\]::', ''
+            if ($target -notmatch '(?i)^process$') { $envName = ([string]$Matches['name']).Trim().Trim('"', "'"); $envHow = '[Environment]::SetEnvironmentVariable' }
+        }
+    } elseif ($cmd -match '(?i)(^|[\s;&|(])(reg(\.exe)?\s+add|Set-ItemProperty|sp|New-ItemProperty|Remove-ItemProperty|rp|Set-Item|si|New-Item|ni)\b[^|;]*\bHK(CU|LM|EY_CURRENT_USER|EY_LOCAL_MACHINE)[:\\][^\s"'']*Environment(["''\s]|$)') {
+        $envName = ''; $envHow = 'a registry write to the Environment key'
+        if ($cmd -match '(?i)(\s/v\s+|\s-Name\s+)["'']?(?<name>[^\s"'']+)') { $envName = $Matches['name'] }
+    }
+    if ($null -ne $envName) {
+        if ($envName -match '[$%`]') { $envName = '' }
+        $protected = ''
+        foreach ($pat in @(Get-Prop $cfg @('environment', 'protectedVars') @())) {
+            if ($pat -and $envName -and ($envName -like ([string]$pat))) { $protected = [string]$pat; break }
+        }
+        $mode = [string](Get-Prop $cfg @('environment', 'persistentWrites') 'ask')
+        if ($protected) {
+            Deny ($envHow + ' writes the protected environment variable ' + $envName + ' (environment.protectedVars "' + $protected + '"): the human owns the build environment. Set it for this process only ($env:NAME) or tell the human.')
+        } elseif (-not $envName) {
+            Ask ($envHow + ' writes a user- or machine-scope environment variable whose name the guard cannot read; it outlives the session. Confirm with the human.')
+        } elseif ($mode -eq 'deny') {
+            Deny ($envHow + ' writes the environment variable ' + $envName + ' persistently (environment.persistentWrites "deny"). Set it for this process only ($env:NAME).')
+        } elseif ($mode -ne 'allow') {
+            Ask ($envHow + ' writes the environment variable ' + $envName + ' persistently: it outlives this session and changes the build environment of every tool on the machine. Set it for this process only ($env:NAME) or confirm with the human.')
+        }
     }
 
     # ---- PowerShell writes into ASCII sources on a code-page machine -------------------------

@@ -13,10 +13,10 @@ sets `hooks.runtime` to `powershell` and leaves the core Node hook entries out o
 | Path | Installed as | What |
 |---|---|---|
 | `hooks/lib.ps1` | `.claude/hooks/hooks-powershell/` | shared preamble: BOM-tolerant stdin JSON, config loader, project root, decision JSON |
-| `hooks/guard-shell.ps1` | same (PreToolUse `Bash\|PowerShell`) | push policy, force push, remote and global-config changes, destructive git (ask), staging and commit rules, AI attribution and forbidden phrases, identity overrides, repo-local identity check, denied e-mails, never-kill / never-launch processes, PowerShell writes into ASCII sources on a code-page machine, deletes that name protected, read-only or local-only paths |
+| `hooks/guard-shell.ps1` | same (PreToolUse `Bash\|PowerShell`) | push policy, force push, remote and global-config changes, destructive git (ask), staging and commit rules, AI attribution and forbidden phrases, identity overrides, repo-local identity check, denied e-mails, never-kill / never-launch processes, persistent environment variable writes (setx, `SetEnvironmentVariable` with a User/Machine target, Environment registry keys; `environment.*`), PowerShell writes into ASCII sources on a code-page machine, deletes that name protected, read-only or local-only paths |
 | `hooks/subagent-model-guard.ps1` | same (PreToolUse `Agent`) | model per role from `models.*`, explicit `model`, no fork; fails closed |
 | `hooks/sync-memory.ps1` | same (Stop; also `-Restore`, `-DryRun`, `-Status`) | mirrors Claude's global memory into `paths.memoryMirror`, same folder naming as the Node hook |
-| `hooks/test-hooks.ps1` | same | `powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/hooks-powershell/test-hooks.ps1 [filter]`; 65 table-driven cases plus 10 unit checks |
+| `hooks/test-hooks.ps1` | same | `powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/hooks-powershell/test-hooks.ps1 [filter]`; 77 table-driven cases plus 10 unit checks |
 | `hooks/settings.fragment.json` | merged into `.claude/settings.json` | wires the three hooks with `$CLAUDE_PROJECT_DIR` |
 
 ## Config keys (`kit.config.json`)
@@ -52,7 +52,7 @@ scripts read (`git.*`, `paths.*`, `processes.*`, `encoding.codePage`, `encoding.
 ## Testing
 
 `test-hooks.ps1` builds a throwaway project under the temp folder and runs every hook as a
-child process (75 checks: 65 table cases, 10 unit checks). Run it after installing and after
+child process (87 checks: 77 table cases, 10 unit checks). Run it after installing and after
 every change to `kit.config.json` that the hooks read; `install.js --test` runs it when the
 pack is enabled and the executable is found. It needs PowerShell; the kit repository's own
 test run (`node core/hooks/test-hooks.js`) does not cover these scripts. The scripts avoid

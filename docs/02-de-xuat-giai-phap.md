@@ -190,9 +190,9 @@ Ghi chú: Claude Code chỉ tự động đọc `.claude/rules/`, `.claude/agent
 ## 6. Tiến độ hiện tại và việc tiếp theo
 
 Tình trạng repo `claude-kit` (`main` = `d68394b`): 8 commit sau bản khởi tạo; bộ test
-`node core/hooks/test-hooks.js` 242/242, `packs/controller-kernel/hooks/test-kernel-gates.js`,
+`node core/hooks/test-hooks.js` 265/265, `packs/controller-kernel/hooks/test-kernel-gates.js`,
 `packs/work-package/hooks/test-wt-guard.js` 18/18, `packs/docs-spec-driven/tools/test-docs-gate.js`,
-`packs/hooks-powershell/hooks/test-hooks.ps1` 75/75 (Windows PowerShell 5.1.26100) đều 0 fail. Cài thử 5 pack cùng lúc
+`packs/hooks-powershell/hooks/test-hooks.ps1` 87/87 (Windows PowerShell 5.1.26100) đều 0 fail. Cài thử 5 pack cùng lúc
 vào thư mục tạm và `--update` lại đều đúng layout.
 
 Bài học từ dry-run ncr_picking đã vào kit:
@@ -208,6 +208,11 @@ Bài học từ dry-run ncr_picking đã vào kit:
   git log -1 | grep -ciE "co-authored"` không còn bị deny oan; message có trailer vẫn deny (K17, đã sửa).
 - `sed -i` / `perl -i` lên file trong project (ngoài scratchpad, temp của Claude và thư mục build)
   → ask, vì qua shell file mất CRLF và encoding; readOnly và file kit vẫn deny; dùng Edit tool (K18, đã sửa).
+- Ghi biến môi trường bền (`setx`, `[Environment]::SetEnvironmentVariable(.., "User"|"Machine")`,
+  khóa registry `HKCU\Environment` / `HKLM\...\Environment`) → ask vì sống lâu hơn session và đổi môi
+  trường build của mọi tool trên máy; tên trong `environment.protectedVars` (vd `BINPICK_*`) → deny; tên
+  không đọc được → ask; `$env:X` (process scope) vẫn tự do. Cả bản Node lẫn bản PowerShell (K19, đã sửa,
+  phát hiện khi retrofit bin-picking: rule cấm đổi `BINPICK_*` nhưng hook không chặn).
 - `test-hooks.ps1` chạy xanh trên Windows PowerShell 5.1: 5.1 biến stderr của tiến trình con thành
   `NativeCommandError` khi stream bị redirect, harness đặt `ErrorActionPreference = Stop` nên chết ở case
   fail-open. Harness hạ xuống `Continue` quanh mỗi lời gọi hook; bản thân ba hook không bị ảnh hưởng
