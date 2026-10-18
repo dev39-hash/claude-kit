@@ -1,0 +1,29 @@
+{
+  "_comment": "Merged into .claude/settings.json by install.js. When this pack is enabled the installer sets hooks.runtime to powershell and leaves out the core Node hook entries; {{pack}} expands to $CLAUDE_PROJECT_DIR/.claude/hooks/hooks-powershell. packConfig.hooks-powershell.exe (default powershell) replaces the executable, for example pwsh.",
+  "permissions": {
+    "allow": []
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          { "type": "command", "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"{{pack}}/guard-shell.ps1\"", "timeout": 10 }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          { "type": "command", "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"{{pack}}/subagent-model-guard.ps1\"", "timeout": 10 }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"{{pack}}/sync-memory.ps1\"", "timeout": 15 }
+        ]
+      }
+    ]
+  }
+}
