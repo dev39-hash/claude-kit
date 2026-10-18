@@ -1,0 +1,90 @@
+#ifndef {{NAME}}_CORE_H
+#define {{NAME}}_CORE_H
+
+#include <string>
+
+#include "ctrl_kernel/core_traits.h"
+#include "ctrl_kernel/output_image.h"
+#include "ctrl_kernel/readiness.h"
+#include "{{name}}_core/effects.h"
+#include "{{name}}_core/events.h"
+#include "{{name}}_core/policy.h"
+#include "{{name}}_core/state.h"
+
+/**
+ * @file {{name}}_core.h
+ * @brief {{Name}} core: the pure decision core. One entry point (step), explicit State, Effects
+ *        as data. No Qt, no runner, no clock (laws L1, L2).
+ */
+namespace {{ns}} {
+
+class {{Name}}Core {
+public:
+    using Event = {{ns}}::Event;
+    using Effect = {{ns}}::Effect;
+    using State = {{ns}}::State;
+    using Policy = {{ns}}::Policy;
+    using Readiness = ctrl::Readiness<NotReadyReason>;
+
+    explicit {{Name}}Core(Policy policy = Policy::defaults());
+
+    /**
+     * @brief The only entry point. Applies `event` to the state and returns what must happen.
+     * @param[in] event one normalised input
+     * @return effects in the order the executor must run them; a Trace for a stale pair,
+     *         PublishOutputs when outputs() changed, Notify when readiness changed
+     * @post state() reflects the event; no effect has been carried out yet
+     */
+    Effects step(const Event &event);
+
+    const State &state() const { return m_s; }
+    const Policy &policy() const { return m_p; }
+
+    /// Ready, or every reason the controller may not take a start right now.
+    Readiness readiness() const;
+    /// Desired value of every master-facing signal, by stable signal name.
+    ctrl::OutputImage outputs() const;
+    /// The display names, projected from the state for the lamp and the trace.
+    DisplayState display() const;
+
+private:
+    // One handler per event. Each only changes m_s and pushes effects.
+    void on(const Setup &, Effects &);
+    void on(const Stop &, Effects &);
+    void on(const StartRequested &, Effects &);
+    void on(const AckRise &, Effects &);
+    void on(const RoleStatus &, Effects &);
+    void on(const StageDone &, Effects &);
+    void on(const Timer &, Effects &);
+
+    // Shared transitions.
+    void enterLive(Effects &);
+    void finishStop(Effects &);
+    void startJob(Effects &);
+    void abortJob(FaultCode code, const std::string &why, Effects &);
+    void raiseFault(FaultCode code, const std::string &why, Effects &);
+    void onDeviceDown(Role, ConnectStatus, Effects &);
+    bool jobInFlight() const;
+    FaultCode lossCode(Role) const;
+
+    void arm(TimerKey key, int role, int ms, Effects &);
+    void disarm(TimerKey key, int role, Effects &);
+    void disarmAllTimers(Effects &);
+
+    void log(ctrl::LogLevel, std::string, Effects &) const;
+    void notify(TaskEvent, std::string, Effects &) const;
+    void trace(const char *event, const char *note, DisplayState from, Effects &) const;
+    void finish(const char *event, DisplayState before, bool readyBefore, Effects &);
+
+    State m_s;
+    Policy m_p;
+    ctrl::OutputImage m_lastImage;
+    bool m_hasPublished{false};
+};
+
+static_assert(ctrl::is_controller_core<{{Name}}Core>::value,
+              "{{Name}}Core must keep the controller-core shape");
+
+} // namespace {{ns}}
+
+#endif // {{NAME}}_CORE_H

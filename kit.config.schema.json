@@ -563,7 +563,7 @@
     "packConfig": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Per-pack settings keyed by pack name (for example cpp-cmake-gtest.goldenDir, cpp-qmake-qt.umbrellaPro, work-package.wpDir). Each pack documents its keys in its README.",
+      "description": "Per-pack settings keyed by pack name (for example cpp-cmake-gtest.goldenDir, cpp-qmake-qt.umbrellaPro, controller-kernel.coreDirs, work-package.wpDir, docs-spec-driven.machinePathRoots). Each pack documents its keys in its README.",
       "default": {}
     }
   }

@@ -1,0 +1,36 @@
+#ifndef {{NAME}}_CORE_POLICY_H
+#define {{NAME}}_CORE_POLICY_H
+
+#include <array>
+
+#include "ctrl_kernel/blocks.h"
+#include "{{name}}_core/events.h"
+#include "{{name}}_core/state.h"
+
+/**
+ * @file policy.h
+ * @brief {{Name}} core: every number and behaviour flag, as data (law L9). A later ruling changes
+ *        one field here and nothing else. Mark each field "ruled" or "needs a ruling" in the
+ *        design document's Policy table.
+ */
+namespace {{ns}} {
+
+struct Policy {
+    std::array<ctrl::RolePolicy, kRoleCount> roles;
+    int startDeadlineMs{3000};   ///< Bound on waiting for the device to connect after Setup.
+    int stopDeadlineMs{3000};    ///< Bound on waiting for the device to disconnect on Stop.
+    int workDeadlineMs{5000};    ///< Bound on the job's stage.
+
+    static Policy defaults()
+    {
+        Policy p;
+        p.roles[roleIndex(Role::Device)].faultCode = static_cast<int>(FaultCode::DeviceLost);
+        return p;
+    }
+
+    const ctrl::RolePolicy &role(Role r) const { return roles[roleIndex(r)]; }
+};
+
+} // namespace {{ns}}
+
+#endif // {{NAME}}_CORE_POLICY_H

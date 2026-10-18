@@ -1,0 +1,19 @@
+{
+  "_comment": "Merged into .claude/settings.json by install.js. {{pack}} expands to $CLAUDE_PROJECT_DIR/.claude/hooks/controller-kernel. The gate hook runs after every edit; gate errors block, L9 warnings come back as context.",
+  "permissions": {
+    "allow": [
+      "Bash(node .claude/tools/controller-kernel/gate-check.js:*)",
+      "Bash(node .claude/hooks/controller-kernel/test-kernel-gates.js:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          { "type": "command", "command": "node \"{{pack}}/kernel-gates.js\"", "timeout": 15 }
+        ]
+      }
+    ]
+  }
+}
