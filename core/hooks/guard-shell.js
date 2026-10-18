@@ -84,18 +84,41 @@ function stripNoise(cmd) {
     .replace(/'[^']*'/g, ' ');
 }
 
-function extractMessages(cmd, root, kind) {
+// Split a command line (heredocs already removed) into its simple commands: on ; & | and
+// newlines outside quotes, so that a grep pattern or an echo next to a git commit is not read
+// as part of the commit.
+function splitSegments(text) {
+  const segs = [];
+  let cur = '';
+  let q = '';
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) {
+      cur += ch;
+      if (ch === '\\' && q === '"' && i + 1 < text.length) cur += text[++i];
+      else if (ch === q) q = '';
+      continue;
+    }
+    if (ch === '"' || ch === '\'') { q = ch; cur += ch; continue; }
+    if (ch === ';' || ch === '&' || ch === '|' || ch === '\n') { segs.push(cur); cur = ''; continue; }
+    cur += ch;
+  }
+  segs.push(cur);
+  return segs.filter((s) => s.trim());
+}
+
+// Message text of one commit-ish or gh pr segment: -m/--message (and --trailer) or
+// -b/--body/-t/--title values, plus the file named by -F/--file/--body-file when it exists.
+function extractMessages(seg, root, kind) {
   const msgs = [];
   const pr = kind === 'pr';
-  const hd = S.extractHeredocs(cmd);
-  for (const b of hd.bodies) msgs.push(b.body);
   let m;
-  const flagNames = pr ? '(?:-b|--body)' : '(?:-[A-Za-z]*m|--message)';
+  const flagNames = pr ? '(?:-b|--body|-t|--title)' : '(?:-[A-Za-z]*m|--message|--trailer)';
   const flag = new RegExp('(?:^|\\s)' + flagNames + '(?:\\s+|=)("(?:[^"\\\\]|\\\\[\\s\\S])*"|\'[^\']*\'|[^\\s"\';&|]+)', 'g');
-  while ((m = flag.exec(hd.text))) msgs.push(m[1]);
+  while ((m = flag.exec(seg))) msgs.push(m[1]);
   const fileNames = pr ? '(?:-F|--body-file)' : '(?:-[A-Za-z]*F|--file)';
   const file = new RegExp('(?:^|\\s)' + fileNames + '(?:\\s+|=)("[^"]+"|\'[^\']+\'|[^\\s;&|]+)', 'g');
-  while ((m = file.exec(hd.text))) {
+  while ((m = file.exec(seg))) {
     const f = m[1].replace(/^["']|["']$/g, '');
     if (f === '-') continue;
     try {
@@ -124,15 +147,29 @@ function headMessage(cfg, root) {
   } catch (_) { return ''; }
 }
 
+// Only the message content is scanned: -m / -F / --trailer values and heredoc bodies of the
+// commit (or tag, merge, notes) segment, --body / --body-file / --title of gh pr, and the
+// message HEAD carries when --amend keeps it. Text elsewhere on the line (a grep pattern, an
+// echo, a log filter) is not a commit message and must not trip the check.
 function checkCommitText(cmd, ctx) {
   const { cfg, d } = ctx;
-  const isCommit = RE_GIT_COMMITISH.test(cmd);
-  const isPr = RE_GH_PR.test(cmd);
+  const hd = S.extractHeredocs(cmd);
+  const msgs = [];
+  let isCommit = false;
+  let isPr = false;
+  for (const seg of splitSegments(hd.text)) {
+    const c = RE_GIT_COMMITISH.test(seg);
+    const p = RE_GH_PR.test(seg);
+    if (!c && !p) continue;
+    isCommit = isCommit || c;
+    isPr = isPr || p;
+    const own = extractMessages(seg, ctx.rootFs, p && !c ? 'pr' : 'commit');
+    if (c && own.length === 0 && /(^|\s)--amend(\s|$)/.test(seg)) own.push(headMessage(cfg, ctx.rootFs));
+    msgs.push(...own);
+  }
   if (!isCommit && !isPr) return;
-  const msgs = extractMessages(cmd, ctx.rootFs, isPr && !isCommit ? 'pr' : 'commit');
-  const bare = stripNoise(cmd);
-  if (isCommit && msgs.length === 0 && /(^|\s)--amend(\s|$)/.test(bare)) msgs.push(headMessage(cfg, ctx.rootFs));
-  const text = msgs.join('\n') + '\n' + cmd;
+  for (const b of hd.bodies) msgs.push(b.body);
+  const text = msgs.join('\n');
   const where = isPr && !isCommit ? 'PR text' : 'commit text';
   for (const [re, label] of ATTRIBUTION) {
     if (re.test(text)) {
