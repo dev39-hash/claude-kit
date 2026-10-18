@@ -185,14 +185,14 @@ Ghi chú: Claude Code chỉ tự động đọc `.claude/rules/`, `.claude/agent
 | 3 | `install.js` + `CLAUDE.template.md` + `PORTING.md` | c5 PORTING | Xong: `--update`, `--dry-run`, `--test`, `--add-exclude`, manifest, merge config viết tay |
 | 4 | 7 packs: `cpp-cmake-gtest`, `cpp-qmake-qt`, `controller-kernel`, `work-package`, `docs-spec-driven`, `agent-skills-lite`, `hooks-powershell` | c1–c5 | Xong cả 7; mỗi pack có README, pack có hook/tool thì có test riêng |
 | 5 | Cài thật và chạy một task qua đủ workflow | — | Đã làm trên ncr_picking (dev machine, 2026-10-18): T-001 qua 2 gate, 15 dòng hook kiểm chứng, 16 kit issue K1–K16 đã sửa và merge vào `main`. Còn: image_matching, controller-kernel, mc_protocol |
-| 6 | NichirinLaserMark: pack `hooks-powershell` | c4 | Pack xong, 72 case chạy xanh bằng pwsh 7 trên Linux; chưa chạy trên Windows PowerShell 5.1 của máy đó |
+| 6 | NichirinLaserMark: pack `hooks-powershell` | c4 | Pack xong; `test-hooks.ps1` 75/75 xanh trên Windows PowerShell 5.1 (máy dev, 2026-10-18) sau khi sửa harness; chưa chạy trên máy NichirinLaserMark |
 
 ## 6. Tiến độ hiện tại và việc tiếp theo
 
-Tình trạng repo `claude-kit` (`main` = `5b926bb`): 5 commit sau bản khởi tạo; bộ test
-`node core/hooks/test-hooks.js` 220/220, `packs/controller-kernel/hooks/test-kernel-gates.js`,
+Tình trạng repo `claude-kit` (`main` = `d68394b`): 8 commit sau bản khởi tạo; bộ test
+`node core/hooks/test-hooks.js` 242/242, `packs/controller-kernel/hooks/test-kernel-gates.js`,
 `packs/work-package/hooks/test-wt-guard.js` 18/18, `packs/docs-spec-driven/tools/test-docs-gate.js`,
-`packs/hooks-powershell/hooks/test-hooks.ps1` 72/72 (pwsh 7) đều 0 fail. Cài thử 5 pack cùng lúc
+`packs/hooks-powershell/hooks/test-hooks.ps1` 75/75 (Windows PowerShell 5.1.26100) đều 0 fail. Cài thử 5 pack cùng lúc
 vào thư mục tạm và `--update` lại đều đúng layout.
 
 Bài học từ dry-run ncr_picking đã vào kit:
@@ -203,10 +203,19 @@ Bài học từ dry-run ncr_picking đã vào kit:
 - Trường **Baseline** ở Gate 1 cho thay đổi git không thấy; gate "chỉ diff" với số nợ cũ (K4, K15).
 - Gate 2 đổi deliverable là ruling: ghi `decisions.md`, quay lại implement, review lại (K16).
 - Pack work-package nới lệnh cấm từ vựng của rule 02 cho tài liệu plan được track (K3).
+- Kiểm tra AI attribution / forbidden phrase chỉ quét nội dung message (`-m`, `-F`, `--trailer`,
+  heredoc, `gh pr --body/--body-file/--title`), không quét cả dòng lệnh: `git commit -F msg.txt;
+  git log -1 | grep -ciE "co-authored"` không còn bị deny oan; message có trailer vẫn deny (K17, đã sửa).
+- `sed -i` / `perl -i` lên file trong project (ngoài scratchpad, temp của Claude và thư mục build)
+  → ask, vì qua shell file mất CRLF và encoding; readOnly và file kit vẫn deny; dùng Edit tool (K18, đã sửa).
+- `test-hooks.ps1` chạy xanh trên Windows PowerShell 5.1: 5.1 biến stderr của tiến trình con thành
+  `NativeCommandError` khi stream bị redirect, harness đặt `ErrorActionPreference = Stop` nên chết ở case
+  fail-open. Harness hạ xuống `Continue` quanh mỗi lời gọi hook; bản thân ba hook không bị ảnh hưởng
+  (Claude Code chạy thẳng `powershell -File`, đọc stderr như text). Chi tiết trong README của pack.
 
 Việc tiếp theo, theo thứ tự:
 
-1. **ncr_picking**: `install.js --update` để nhận K1–K16; chạy lại `test-hooks.js`; chốt ba câu hỏi
+1. **ncr_picking**: `install.js --update` để nhận K1–K18; chạy lại `test-hooks.js`; chốt ba câu hỏi
    mở của report (commit T-002 `.gitignore`, bundle note cho máy deploy, test đỏ một lần phía deploy).
 2. **image_matching** (`cpp-cmake-gtest`, sạch nhất): cài, điền `kit.config.json` và 5 file
    `project/*.md`, một task nhỏ qua 2 gate, report kit issue theo mẫu của ncr_picking.
@@ -216,7 +225,8 @@ Việc tiếp theo, theo thứ tự:
 4. **mc_protocol** (`cpp-cmake-gtest,agent-skills-lite`, có thể thêm `docs-spec-driven`): retrofit từ
    `agent-team/`, giữ `decisions.md`/`lessons.md` cũ; đây là nơi so sánh workflow kit với bản gốc c5.
 5. **NichirinLaserMark** (`cpp-qmake-qt,docs-spec-driven,hooks-powershell`): cài từ máy có Node
-   hoặc copy `.claude/`; chạy `test-hooks.ps1` trên PowerShell 5.1; sửa những gì chỉ 5.1 mới lộ.
+   hoặc copy `.claude/`; chạy lại `test-hooks.ps1` trên PowerShell 5.1 của máy đó (harness đã xanh trên
+   5.1 ở máy dev); sửa những gì chỉ máy đó mới lộ.
 6. Sau mỗi lần cài: issue về kit đi vào `.claude/docs/notes/<date>_kit-dry-run-report.md` mục 5
    như ncr_picking đã làm, rồi sửa ở kit và `--update` cho mọi project.
 

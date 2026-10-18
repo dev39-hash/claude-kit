@@ -32,6 +32,7 @@ stderr.
 | `encoding.asciiExtensions`, `asciiExempt`, `asciiRepoMarkdown`, `codePage` | guard-edit, guard-shell (PowerShell writes), format |
 | `models.worker`, `reviewer`, `forceAll`, `allowFork` | subagent-model-guard |
 | `build.formatOnEdit`, `buildDirPatterns`, `toolchain.clangFormatExe`, `toolchain.vsRoot` | format |
+| `build.buildDirPatterns`, `leadBuildDir`, `slots.dir` | guard-shell (in-place edits with sed -i / perl -i are free there) |
 
 Pattern forms for path lists: `dir/` (the directory and below), `a/b.txt` (exactly that path),
 `*.ts` (basename or first segment glob), `docs/*.md` (relative-path glob).
