@@ -24,9 +24,25 @@ $config = @{
 [IO.File]::WriteAllText((Join-Path $P '.claude\kit.config.json'), (ConvertTo-Json $config -Depth 6), (New-Object System.Text.UTF8Encoding $false))
 $env:CLAUDE_PROJECT_DIR = $P
 
+# Runs one hook as a child process and returns its stdout. Windows PowerShell 5.1 turns every
+# stderr line of a native command into a NativeCommandError record once the stream is
+# redirected, and under $ErrorActionPreference = 'Stop' the first such line (the fail-open note
+# of guard-shell.ps1, the summary sync-memory.ps1 prints) would terminate this script. The
+# preference is lowered to Continue for the call only; stderr is dropped and stdout compared.
+# The hooks themselves are not affected: Claude Code starts them directly and reads stderr as
+# plain text; only a PowerShell parent that redirects the stream sees the records.
+function Invoke-Hook([string]$hook, [string]$stdin, [string[]]$extra = @()) {
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $out = $stdin | & $exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here $hook) @extra 2>$null
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+    return ($out | Out-String).Trim()
+}
 function Run-Hook([string]$hook, [string]$json) {
-    $out = $json | & $exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here $hook) 2>$null
-    $text = ($out | Out-String).Trim()
+    $text = Invoke-Hook $hook $json
     if (-not $text) { return 'allow' }
     try { return (ConvertFrom-Json $text).hookSpecificOutput.permissionDecision } catch { return 'bad:' + $text }
 }
@@ -126,11 +142,18 @@ foreach ($c in $cases) {
     Write-Output ($tag + ($c.hook -replace '\.ps1$', '').PadRight(21) + $c.expect.PadRight(6) + $extra + $c.label)
 }
 
+# unit checks: counted like the table cases
+$units = 0
+function Unit([string]$name, [bool]$ok) {
+    $script:units++
+    if ($ok) { Write-Output ('ok    unit  ' + $name) } else { $script:failures++; Write-Output ('FAIL  unit  ' + $name) }
+}
+
 # unreadable input: guard-shell allows, model guard denies
-$got = ('not json' | & $exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here 'guard-shell.ps1') 2>$null | Out-String).Trim()
-if ($got -eq '') { Write-Output 'ok    unit  guard-shell fails open on unreadable input' } else { $failures++; Write-Output 'FAIL  unit  guard-shell fails open on unreadable input' }
-$got = ('not json' | & $exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here 'subagent-model-guard.ps1') 2>$null | Out-String).Trim()
-if ($got -match '"permissionDecision":"deny"') { Write-Output 'ok    unit  model guard fails closed on unreadable input' } else { $failures++; Write-Output 'FAIL  unit  model guard fails closed on unreadable input' }
+$got = Invoke-Hook 'guard-shell.ps1' 'not json'
+Unit 'guard-shell fails open on unreadable input' ($got -eq '')
+$got = Invoke-Hook 'subagent-model-guard.ps1' 'not json'
+Unit 'model guard fails closed on unreadable input' ($got -match '"permissionDecision":"deny"')
 
 # sync-memory: mirror, remove stale, restore never removes
 $G = Join-Path $T 'global'
@@ -141,17 +164,17 @@ New-Item -ItemType Directory -Force -Path $G, $M | Out-Null
 [IO.File]::WriteAllText((Join-Path $M 'stale.md'), "old`n")
 [IO.File]::WriteAllText((Join-Path $M 'README.md'), "keep`n")
 $env:CLAUDE_MEMORY_DIR = $G
-& $exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here 'sync-memory.ps1') 2>$null | Out-Null
+Invoke-Hook 'sync-memory.ps1' '' | Out-Null
 $okMirror = (Test-Path (Join-Path $M 'a.md')) -and (Test-Path (Join-Path $M 'MEMORY.md')) -and -not (Test-Path (Join-Path $M 'stale.md')) -and (Test-Path (Join-Path $M 'README.md'))
-if ($okMirror) { Write-Output 'ok    unit  sync-memory mirrors and removes stale, keeps README.md' } else { $failures++; Write-Output 'FAIL  unit  sync-memory mirrors and removes stale, keeps README.md' }
+Unit 'sync-memory mirrors and removes stale, keeps README.md' $okMirror
 [IO.File]::WriteAllText((Join-Path $M 'b.md'), "b`n")
 Remove-Item (Join-Path $G 'a.md')
-& $exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here 'sync-memory.ps1') -Restore 2>$null | Out-Null
+Invoke-Hook 'sync-memory.ps1' '' @('-Restore') | Out-Null
 $okRestore = (Test-Path (Join-Path $G 'b.md')) -and (Test-Path (Join-Path $G 'MEMORY.md'))
-if ($okRestore) { Write-Output 'ok    unit  sync-memory restore copies and never removes' } else { $failures++; Write-Output 'FAIL  unit  sync-memory restore copies and never removes' }
+Unit 'sync-memory restore copies and never removes' $okRestore
 Remove-Item (Join-Path $G 'MEMORY.md')
-& $exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here 'sync-memory.ps1') 2>$null | Out-Null
-if (Test-Path (Join-Path $M 'b.md')) { Write-Output 'ok    unit  sync-memory refuses a source without MEMORY.md' } else { $failures++; Write-Output 'FAIL  unit  sync-memory refuses a source without MEMORY.md' }
+Invoke-Hook 'sync-memory.ps1' '' | Out-Null
+Unit 'sync-memory refuses a source without MEMORY.md' (Test-Path (Join-Path $M 'b.md'))
 Remove-Item Env:\CLAUDE_MEMORY_DIR
 
 # every hook source is ASCII
@@ -159,11 +182,11 @@ foreach ($f in Get-ChildItem -LiteralPath $here -File -Filter '*.ps1') {
     $bytes = [IO.File]::ReadAllBytes($f.FullName)
     $ascii = $true
     foreach ($b in $bytes) { if ($b -gt 0x7F) { $ascii = $false; break } }
-    if ($ascii) { Write-Output ('ok    unit  ASCII source ' + $f.Name) } else { $failures++; Write-Output ('FAIL  unit  ASCII source ' + $f.Name) }
+    Unit ('ASCII source ' + $f.Name) $ascii
 }
 
 Write-Output ''
-Write-Output ('failures: ' + $failures + ' / ' + ($ran + 7))
+Write-Output ('failures: ' + $failures + ' / ' + ($ran + $units))
 try { Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue } catch { }
 if ($failures -gt 0) { exit 1 }
 exit 0

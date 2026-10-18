@@ -16,7 +16,7 @@ sets `hooks.runtime` to `powershell` and leaves the core Node hook entries out o
 | `hooks/guard-shell.ps1` | same (PreToolUse `Bash\|PowerShell`) | push policy, force push, remote and global-config changes, destructive git (ask), staging and commit rules, AI attribution and forbidden phrases, identity overrides, repo-local identity check, denied e-mails, never-kill / never-launch processes, PowerShell writes into ASCII sources on a code-page machine, deletes that name protected, read-only or local-only paths |
 | `hooks/subagent-model-guard.ps1` | same (PreToolUse `Agent`) | model per role from `models.*`, explicit `model`, no fork; fails closed |
 | `hooks/sync-memory.ps1` | same (Stop; also `-Restore`, `-DryRun`, `-Status`) | mirrors Claude's global memory into `paths.memoryMirror`, same folder naming as the Node hook |
-| `hooks/test-hooks.ps1` | same | `powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/hooks-powershell/test-hooks.ps1 [filter]`; about 70 table-driven cases plus unit checks |
+| `hooks/test-hooks.ps1` | same | `powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/hooks-powershell/test-hooks.ps1 [filter]`; 65 table-driven cases plus 10 unit checks |
 | `hooks/settings.fragment.json` | merged into `.claude/settings.json` | wires the three hooks with `$CLAUDE_PROJECT_DIR` |
 
 ## Config keys (`kit.config.json`)
@@ -52,12 +52,25 @@ scripts read (`git.*`, `paths.*`, `processes.*`, `encoding.codePage`, `encoding.
 ## Testing
 
 `test-hooks.ps1` builds a throwaway project under the temp folder and runs every hook as a
-child process (72 cases). Run it after installing and after every change to `kit.config.json`
-that the hooks read; `install.js --test` runs it when the pack is enabled and the executable
-is found. It needs PowerShell; the kit repository's own test run
-(`node core/hooks/test-hooks.js`) does not cover these scripts. The scripts avoid pwsh-only
-syntax and were exercised with pwsh 7; a run under Windows PowerShell 5.1 on the target
-machine is still part of porting step 5.
+child process (75 checks: 65 table cases, 10 unit checks). Run it after installing and after
+every change to `kit.config.json` that the hooks read; `install.js --test` runs it when the
+pack is enabled and the executable is found. It needs PowerShell; the kit repository's own
+test run (`node core/hooks/test-hooks.js`) does not cover these scripts. The scripts avoid
+pwsh-only syntax; the harness ran green under pwsh 7 on Linux before the 5.1 fix below and
+under Windows PowerShell 5.1 (5.1.26100) after it.
+
+**stderr under PowerShell 5.1.** Every hook reports on stderr (the fail-open note of
+`guard-shell.ps1`, the copy summary of `sync-memory.ps1`). Windows PowerShell 5.1 turns each
+stderr line of a native child into a `NativeCommandError` record as soon as the stream is
+redirected (`2>$null`, `2>&1`), and under `$ErrorActionPreference = 'Stop'` the first line
+terminates the caller. That bit the test harness, which now lowers the preference to
+`Continue` around each child call and compares stdout only. The hooks themselves are not
+affected: Claude Code starts `powershell -File` directly from `settings.json` and reads
+stderr as plain text, and the one native call inside a hook (`git config` in
+`guard-shell.ps1`) runs under the default `Continue` preference, so a stderr line there is a
+non-terminating record that the hook ignores. Keep it that way: never set
+`$ErrorActionPreference = 'Stop'` in a hook, and never wrap a hook in another PowerShell
+that redirects its stderr.
 
 ## Origin
 
