@@ -20,8 +20,8 @@ interface plus a neutral DTO, injected by non-owning pointer or reference, `null
 
 ## Config as value types
 
-Configs are default-constructible, copyable value types: copy, modify, set. A polymorphic
-algorithm block (`std::shared_ptr<IAlgorithmConfig>`, concrete classes `final` and cloneable)
+Configs are default-constructible, copyable value types: copy, modify, set. Where the project
+has pluggable algorithms, a polymorphic algorithm block (`std::shared_ptr<IAlgorithmConfig>`, concrete classes `final` and cloneable)
 keeps "add an algorithm = add an enum value, a config subclass and a factory branch"; write
 that recipe in the header comment.
 
@@ -31,6 +31,8 @@ that recipe in the header comment.
 by value and let RVO work; prefer one returned struct to several out-parameters.
 
 ## RAII owner for raw or aligned memory
+
+When the project needs raw or aligned memory at all:
 
 ```cpp
 template <typename T> class AlignedBuffer {
@@ -66,10 +68,10 @@ unit-tested alone and timed alone.
 ## Views and lifetimes
 
 A view into another object's memory (`mat(rect)`, `string_view`, span) never outlives its
-owner; document the lifetime where a view is stored. Clamp regions against the parent bounds
-with the library's own intersection helpers, not hand-written min/max.
+owner; document the lifetime where a view is stored. Image or array regions are clamped against
+the parent bounds with the library's own intersection helpers, not hand-written min/max.
 
 ## Angles and units
 
-Degrees at the public API, radians only inside kernels; one wrap convention, written down in
+When the project has them: degrees at the public API, radians only inside kernels; one wrap convention, written down in
 `project/rules.md`, used everywhere, and compared in tests by wrapped difference.

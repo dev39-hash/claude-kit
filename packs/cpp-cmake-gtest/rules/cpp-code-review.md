@@ -15,9 +15,10 @@ paths:
 
 ## Memory-safety triggers (dedicated pass before anything else)
 
-Aligned or raw buffers and their copy/move members; SIMD intrinsics or parallel pragmas;
-views (`mat(rect)`, spans) that may outlive the parent; raw pointers returned from accessors;
-file, document or frame parsing of untrusted input.
+Raw or aligned buffers and their copy/move members; SIMD intrinsics or parallel pragmas;
+views (`mat(rect)`, spans, `string_view`) that may outlive the parent; raw pointers or
+references returned from accessors or kept across a call; file, document, frame or message
+parsing of untrusted input.
 
 ## Checklist
 
@@ -28,7 +29,7 @@ file, document or frame parsing of untrusted input.
 - [ ] Tests: unit test for new logic; regression or golden updated when output changes, with
       the reason; shape check in the Test report
 - [ ] Doxygen on new public symbols; in-place mutation documented
-- [ ] Goldens changed only with an explanation and in their own commit
+- [ ] Goldens (where the project has them) changed only with an explanation and in their own commit
 - [ ] ASCII only in sources, headers, CMake and README; English
 - [ ] Build files: new sources registered in the right target; no machine path; no new
       option without an ADR when it changes the public surface
@@ -37,9 +38,9 @@ file, document or frame parsing of untrusted input.
 
 - Uninitialised members; narrowing `double` to `int` on coordinates without rounding;
   shallow copies where an owned copy was intended; negative or overflowing index math.
-- Angle wrap at +/-180; region offsets not added back; score semantics mixed (lower-is-better
-  vs higher-is-better); filtering that depends on container order.
-- Allocation or `clone()` in inner loops; missing `reserve()`; copies of large owners.
+- Numeric and geometry code: angle wrap at +/-180; region offsets not added back; score
+  semantics mixed (lower-is-better vs higher-is-better); filtering that depends on container order.
+- Allocation or copies in inner loops of a named hot path; missing `reserve()`; copies of large owners.
 
 ## Severity
 

@@ -20,7 +20,7 @@ kernel builds with CMake; the stack pack brings `build.js` and the build slots).
 | `skills/controller-add-event/` | `.claude/skills/` | 12-step path for a new event, completion, timer key or command source |
 | `skills/controller-add-block/` | `.claude/skills/` | block card first; reusable vs controller-local; invariants and tests |
 | `skills/controller-change-rule/` | `.claude/skills/` | classify (Policy field / handler row / derived function), failing row first, when a decision is recorded |
-| `skills/kernel-verify/` | `.claude/skills/` | addendum to the core `verification-loop`: Qt half, gate tool, laws diff review, extra report lines |
+| `skills/kernel-verify/` | `.claude/skills/` | addendum to the core `verification-loop`: Qt half, gate tool, laws diff review, extra report lines; the exact commands (the Qt option and prefix, the test program and its count) come from the project's `build-env.md`, not from the skill |
 | `agents/controller-reviewer.md` | `.claude/agents/` | read-only reviewer (reviewer model): core reviewer contract plus the kernel checklist; use instead of `reviewer` for core, kernel, shell and design tasks |
 | `commands/controller-review.md` | `.claude/commands/` | `/controller-review [scope]`: gate tool, then `controller-reviewer` |
 | `tools/gate-check.js`, `tools/kit-env.js` | `.claude/tools/controller-kernel/` | the gate engine: CLI (`--all`, files, `--json`) and module |
@@ -39,6 +39,7 @@ kernel builds with CMake; the stack pack brings `build.js` and the build slots).
 | `L5-callout` | error | pure core | `emit`, `publish(` |
 | `L10-blocking` | error | shell | `QEventLoop`, `BlockingQueuedConnection`, `.wait(`, `waitForFinished`, `processEvents` |
 | `WARN-PRAGMA` | error | code and build files | `#pragma warning(disable`, `diagnostic ignored`, `/wd`, `-Wno-` |
+| `DOCS` | error | every `README.md` and `paths.docsGateRoots` (default `README.md`, `docs/`) | `.claude`, `Claude`, `Anthropic`, `AGENTS.md`, `CLAUDE.md`, absolute machine paths, plus `docsExtraPatterns` (the project's internal ids) |
 | `L9-literal` | warning | pure core `.cpp` and non-policy headers | numeric literals other than 0 and 1 outside enum bodies, array sizes, preprocessor lines, `constexpr`, `static_assert` and `*Policy` structs |
 
 "Pure core" is `include/<kernelInclude>/**` plus every directory whose name matches
@@ -56,14 +57,20 @@ ignored. The scanner is a heuristic, not a compiler: the build and the tests dec
     "policyFiles": ["*policy*"],
     "walkDirs": ["include", "examples", "qt", "tests", "src", "cmake"],
     "literalGate": "warning",
-    "extraImpureHeaders": []
+    "extraImpureHeaders": [],
+    "docsGate": "error",
+    "docsExtraPatterns": []
   }
 }
 ```
 
 `walkDirs` is what `--all` walks (plus top-level CMake files, `README.md` and `docs/`); add
 every directory that holds a core. `literalGate: "off"` disables L9 for projects that keep
-named constants in cores on purpose. The rule files' path globs are fixed; a project with
+named constants in cores on purpose. `docsGate: "off"` disables `DOCS`; `docsExtraPatterns`
+holds regular expressions for words only this project bans from its docs (for example
+`"\bADR-\d"`, `"\bWP-"` when internal record ids must not leak). The `DOCS` gate checks the
+fixed vocabulary; people, roles of people, plans and origin projects are the reviewer's job.
+The rule files' path globs are fixed; a project with
 other directory names repeats the laws' paths in `.claude/project/rules.md`.
 
 ## Task classification rows (add to `.claude/project/task-classification.md`)

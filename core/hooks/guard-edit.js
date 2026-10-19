@@ -10,8 +10,10 @@
 //          a file named in paths.forbiddenTreeFiles (CLAUDE.md, AGENTS.md, AGENT.md) anywhere in
 //          the project outside .claude/;
 //          a non-ASCII character written into a file the ASCII rule covers (encoding.*).
-//   ask  - edits under paths.askBeforeEdit; edits of .claude/settings.json and kit.config.json.
-// Files outside the project are not this hook's business. Any internal error allows the edit.
+//   ask  - edits under paths.askBeforeEdit; edits of .claude/settings.json and kit.config.json;
+//          edits outside the project (temp folders, the scratchpad and Claude's memory folders
+//          excepted; paths.foreignTrees denied).
+// Any internal error allows the edit.
 'use strict';
 
 const fs = require('fs');
@@ -28,6 +30,23 @@ function managedPaths(rootFs) {
   } catch (_) { return new Set(); }
 }
 
+// Edits outside the project (controller-kernel dry-run: the stale C: copy of the tree was
+// writable). Free: Claude's temp folders and the session scratchpad, and Claude's own memory
+// folders (~/.claude/projects/<project>/memory/). paths.foreignTrees (other checkouts, standby
+// copies) is denied. Everything else asks (category outsideEdit).
+function outside(abs, cfg, d, target) {
+  if (P.inTemp(abs, P.tempRoots(cfg))) return;
+  const projects = P.norm(path.join(require('os').homedir(), '.claude', 'projects'));
+  if (P.under(abs, projects) && /\/memory(\/|$)/i.test(P.rel(abs, projects))) return;
+  const foreign = (cfg.paths.foreignTrees || []).find((t) => P.under(abs, P.norm(String(t).replace(/\/+$/, ''))));
+  if (foreign) {
+    d.deny(target + ' is inside "' + foreign + '" (paths.foreignTrees): another checkout or a standby copy of a tree, never edited from this project.');
+    return;
+  }
+  d.ask(target + ' is outside the project. Edits outside the project folder need the human\'s yes for that path ' +
+    '(the session scratchpad and Claude\'s memory folder excepted).', 'outsideEdit');
+}
+
 function main(input, d) {
   const ti = input.tool_input || {};
   const target = String(ti.file_path || ti.notebook_path || ti.path || '');
@@ -36,7 +55,7 @@ function main(input, d) {
   const root = P.norm(rootFs);
   const cwd = P.norm(input.cwd || rootFs);
   const abs = P.isAbsolute(target) ? P.norm(target) : P.norm(cwd + '/' + target);
-  if (!P.under(abs, root)) return;
+  if (!P.under(abs, root)) { outside(abs, cfg, d, target); d.escalate(input, cfg); return; }
   const rel = P.rel(abs, root);
   const inClaude = rel.startsWith('.claude/');
 

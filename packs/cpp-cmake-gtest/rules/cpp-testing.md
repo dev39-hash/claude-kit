@@ -10,6 +10,10 @@ paths:
 ---
 # C++ testing with GoogleTest and CTest (pack cpp-cmake-gtest)
 
+> For GoogleTest projects. A project with its own test harness (a table-driven kit, QtTest,
+> doctest) leaves this file out with `packConfig.cpp-cmake-gtest.skipRules: ["cpp-testing.md"]`
+> and states its testing policy in `project/rules.md`.
+
 > Adapted from ECC `rules/common/testing.md` and `rules/cpp/testing.md` (MIT). Coverage is a
 > goal, never a merge gate. The kit's core rule `06-evidence.md` (RED first, negative check,
 > never edit a test to pass) applies on top.

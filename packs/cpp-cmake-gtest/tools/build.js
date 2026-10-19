@@ -19,7 +19,8 @@
 //   --release-slot   release the slot after the run (otherwise: node .../wt-slot.js release <tag>)
 //   --fresh          empty the build directory first (only a directory inside the project that
 //                    matches build.buildDirPatterns or the slot dir; a slot keeps its lock), then configure
-//   --no-reconfigure never reconfigure on its own (build / all)
+//   --no-reconfigure never reconfigure on its own (build / all); a -D whose value the cache already
+//                    holds does not force a configure
 //   --log-dir        where step logs go; default <paths.scratch>/build-logs (outside the build
 //                    dir, which may be emptied); --no-log writes none
 //
@@ -37,7 +38,7 @@
 // kit.config.json keys used: build.leadBuildDir, build.slots, build.buildDirPatterns,
 // build.warningsAsErrors, build.toolchain.cmakeExe / ctestExe / vsRoot, paths.scratch,
 // paths.readOnly, packConfig.cpp-cmake-gtest.{generator, architecture, configureArgs,
-// defaultConfig, warningsAsErrorsOption, suppressRegeneration}.
+// defaultConfig, warningsAsErrorsOption, suppressRegeneration, testCountRegex}.
 // cmake/ctest: build.toolchain.cmakeExe, then PATH, then Visual Studio installs (vswhere, the usual
 // Program Files layout). Children run with MSBUILDDISABLENODEREUSE=1 so no idle MSBuild node
 // outlives the run. Tool output is streamed and logged; each step ends with
@@ -210,6 +211,27 @@ function runTool(exe, args, logFile) {
 
 // ---- cache and inputs ------------------------------------------------------------------------
 function normDir(p) { const r = path.resolve(p).replace(/\\/g, '/').replace(/\/+$/, ''); return process.platform === 'win32' ? r.toLowerCase() : r; }
+
+// A -D on the command line forces a configure only when the cache does not already hold that
+// value (controller-kernel: the Qt half reconfigured on every run because its -D options are
+// always given). Booleans compare as ON/OFF, paths with forward slashes and no trailing slash.
+function defsDiffer(dir, defs) {
+  let text;
+  try { text = fs.readFileSync(path.join(dir, 'CMakeCache.txt'), 'utf8'); } catch (_) { return 'no CMakeCache.txt'; }
+  const norm = (v) => {
+    const s = String(v).trim().replace(/^"|"$/g, '').replace(/\\/g, '/').replace(/\/+$/, '');
+    if (/^(on|true|yes|y|1)$/i.test(s)) return 'ON';
+    if (/^(off|false|no|n|0)$/i.test(s)) return 'OFF';
+    return process.platform === 'win32' ? s.toLowerCase() : s;
+  };
+  for (const d of defs) {
+    const m = d.match(/^-D([^:=]+)(?::[A-Za-z]+)?=(.*)$/);
+    if (!m) return 'a -D was given (' + d + ')';
+    const c = text.match(new RegExp('^' + m[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ':[A-Za-z]+=(.*)$', 'm'));
+    if (!c || norm(c[1]) !== norm(m[2])) return d + ' differs from the cache';
+  }
+  return null;
+}
 
 function readCache(dir) {
   let text;
@@ -389,14 +411,29 @@ async function main() {
     return summary('build', r, extra);
   };
   const test = async () => {
-    const r = await runTool(ctest, ['--test-dir', dir, '-C', o.config, '--output-on-failure'].concat(o.filter ? ['-R', o.filter] : []), logFor('test'));
+    // packConfig.testCountRegex: a test program that reports its own count (one CTest entry,
+    // many tests inside). ctest then runs with -V so the program's output reaches the log, and
+    // the summary adds the program's totals: groups 1 = tests, 2 = failures (summed over every
+    // match, so several programs add up).
+    let countRe = null;
+    if (PC.testCountRegex) { try { countRe = new RegExp(PC.testCountRegex, 'g'); } catch (_) { usage('packConfig.cpp-cmake-gtest.testCountRegex is not a valid regular expression'); } }
+    const r = await runTool(ctest, ['--test-dir', dir, '-C', o.config, countRe ? '-V' : '--output-on-failure'].concat(o.filter ? ['-R', o.filter] : []), logFor('test'));
     const m = r.text.match(/(\d+)% tests passed, (\d+) tests? failed out of (\d+)/);
     const skipped = (r.text.match(/\(Skipped\)/g) || []).length;
-    const extra = m ? 'tests ' + (Number(m[3]) - Number(m[2])) + ' / ' + m[3] + ' passed, ' + m[2] + ' failed, ' + skipped + ' skipped' : 'no ctest summary line';
+    let extra = m ? 'tests ' + (Number(m[3]) - Number(m[2])) + ' / ' + m[3] + ' passed, ' + m[2] + ' failed, ' + skipped + ' skipped' : 'no ctest summary line';
+    if (countRe) {
+      let n = 0, f = 0, k = 0, x;
+      while ((x = countRe.exec(r.text))) { n += Number(x[1] || 0); f += Number(x[2] || 0); k++; if (!x[0]) countRe.lastIndex++; }
+      extra += k ? '; program: ' + n + ' test(s), ' + f + ' failure(s)' : '; program count NOT FOUND (testCountRegex matched nothing)';
+    }
     return summary('test', r, extra);
   };
   const needConfigure = () => {
-    if (o.fresh || o.defs.length) return o.fresh ? '--fresh' : 'a -D was given';
+    if (o.fresh) return '--fresh';
+    if (o.defs.length) {
+      const changed = defsDiffer(dir, o.defs);
+      if (changed) return changed;
+    }
     if (o.noReconfigure) return fs.existsSync(path.join(dir, 'CMakeCache.txt')) ? null : 'no CMakeCache.txt';
     return staleReason(dir);
   };

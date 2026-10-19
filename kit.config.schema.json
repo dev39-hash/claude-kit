@@ -295,6 +295,14 @@
           "description": "Extra directories outside the project where Claude's own temp files may be deleted without asking. The session scratchpad and the Claude temp folder are always allowed.",
           "default": []
         },
+        "foreignTrees": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Absolute folders outside the project that are never changed from it: another checkout, the standby copy left behind when a tree moved. Edits, shell writes and deletes there are denied.",
+          "default": []
+        },
         "docsGateRoots": {
           "type": "array",
           "items": {
@@ -349,6 +357,53 @@
             "type": "integer"
           },
           "description": "Fixed ports test suites bind; suites sharing one run in sequence.",
+          "default": []
+        }
+      }
+    },
+    "commands": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The project's own command rules for guard-shell. Each rule is { match, reason }: match is a case-insensitive regular expression tested against every simple command (name plus arguments as tokenised, nested shells included).",
+      "properties": {
+        "deny": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "match": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "match"
+            ]
+          },
+          "description": "Commands that are always denied (for example \"^git init\\b\" while the human decides when the repository starts).",
+          "default": []
+        },
+        "ask": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "match": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "match"
+            ]
+          },
+          "description": "Commands that ask first (category projectCommand).",
           "default": []
         }
       }
@@ -588,7 +643,9 @@
                   "destructiveGit",
                   "inPlaceEdit",
                   "killByName",
-                  "kitConfig"
+                  "kitConfig",
+                  "outsideEdit",
+                  "projectCommand"
                 ]
               },
               "description": "Ask categories that become a deny in those modes.",
@@ -597,7 +654,11 @@
                 "envWrite",
                 "askBeforeEdit",
                 "localOnlyDelete",
-                "destructiveGit"
+                "destructiveGit",
+                "outsideDelete",
+                "unresolvedDelete",
+                "killByName",
+                "outsideEdit"
               ]
             }
           }

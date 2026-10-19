@@ -36,6 +36,8 @@ const DEFAULTS = {
   walkDirs: ['include', 'examples', 'qt', 'tests', 'src', 'cmake'],
   literalGate: 'warning',
   extraImpureHeaders: [],
+  docsGate: 'error',
+  docsExtraPatterns: [],
 };
 
 function packConfig(cfg) {

@@ -26,8 +26,15 @@ Always loaded. Paths and process names live in `.claude/kit.config.json` (`paths
   (Edit, Write, shell redirection, `mv`, `cp`, `sed -i`, `robocopy`).
   `paths.askBeforeEdit` asks first. `paths.localOnly` holds data git cannot restore: ask
   before deleting.
-- Targets that cannot be resolved statically (`$VAR`, `%VAR%`, `$(...)`, `~`, pipeline input)
-  are refused except `$CLAUDE_PROJECT_DIR` and `$CLAUDE_SCRATCHPAD_DIR`.
+- A delete whose target cannot be resolved statically (`$VAR`, `%VAR%`, `$(...)`, `~`,
+  pipeline input) asks, and in auto mode is denied (`unresolvedDelete`);
+  `$CLAUDE_PROJECT_DIR` and `$CLAUDE_SCRATCHPAD_DIR` resolve. Write the path out instead.
+- Outside the project: an Edit/Write asks (`outsideEdit`; the scratchpad, Claude's temp
+  folders and Claude's memory folders are free); `paths.foreignTrees` (other checkouts, the
+  standby copy left by a move) is never edited, written or deleted. In auto mode, deletes
+  outside the project and kills by name are denied too (`outsideDelete`, `killByName`).
+- Project-specific commands: `commands.deny` / `commands.ask` in `kit.config.json` (for
+  example `git init` while the human decides when the repository starts).
 - Kill only processes this session started, by PID. Killing by name asks. Never launch or
   kill anything in `processes.neverLaunch` / `processes.neverKill`; if one blocks a link or a
   test, stop and tell the human.

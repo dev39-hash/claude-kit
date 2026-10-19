@@ -44,6 +44,7 @@ const DEFAULTS = {
     tasks: '.claude/tasks',
     scratch: '.claude/scratch',
     tempRoots: [],
+    foreignTrees: [],
     docsGateRoots: ['README.md', 'docs/'],
   },
   processes: {
@@ -51,6 +52,7 @@ const DEFAULTS = {
     busyBeforeTests: ['cl', 'link', 'nmake', 'jom', 'ninja', 'msbuild'],
     testPorts: [],
   },
+  commands: { deny: [], ask: [] },
   environment: {
     persistentWrites: 'ask',
     protectedVars: [],
@@ -77,7 +79,7 @@ const DEFAULTS = {
     failMode: 'open',
     autoMode: {
       modes: ['auto', 'bypassPermissions'],
-      askToDeny: ['push', 'envWrite', 'askBeforeEdit', 'localOnlyDelete', 'destructiveGit'],
+      askToDeny: ['push', 'envWrite', 'askBeforeEdit', 'localOnlyDelete', 'destructiveGit', 'outsideDelete', 'unresolvedDelete', 'killByName', 'outsideEdit'],
     },
     timeoutSeconds: { guard: 10, format: 30, stop: 15 },
   },

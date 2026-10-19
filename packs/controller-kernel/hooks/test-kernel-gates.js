@@ -34,6 +34,10 @@ const ARROW = String.fromCharCode(0x2192);
 W('src/odd.cpp', 'int x = 1; // caf' + E_ACUTE + '\n');
 W('3rdparty/vendor/v.cpp', 'int y = 2; // ' + E_ACUTE + ' vendored, exempt\n');
 W('docs/guide.md', '# Guide\n\nUse the arrow ' + ARROW + ' here.\n');
+W('docs/leaky.md', '# Use\n\nGenerated with Claude; notes in .claude/docs and AGENTS.md; built in C:\\work\\x; see DR-0042.\n');
+W('docs/clean.md', '# Use\n\nCall step() with an Event; see examples/ for a core. Roles: PLC, camera.\n');
+W('README.md', '# Kernel\n\nA pure decision core.\n');
+W('examples/README.md', '# Examples\n\nWritten by an agent session in .claude.\n');
 W('CMakeLists.txt', '# -Wno-unused in a comment is fine\nadd_library(x pump_core/pump_core.cpp)\ntarget_compile_options(x PRIVATE /wd4996)\n');
 W('build/gen.cpp', '#include <QTimer>\n');
 W('.claude/scratch/n.cpp', 'QTimer t;\n');
@@ -65,6 +69,10 @@ const perFile = [
   ['src/odd.cpp', 'ASCII'],
   ['3rdparty/vendor/v.cpp', ''],
   ['docs/guide.md', 'ASCII'],
+  ['docs/leaky.md', 'DOCS'],
+  ['docs/clean.md', ''],
+  ['README.md', ''],
+  ['examples/README.md', 'DOCS'],
   ['CMakeLists.txt', 'WARN-PRAGMA'],
   ['build/gen.cpp', ''],
   ['.claude/scratch/n.cpp', ''],
@@ -85,6 +93,13 @@ check('L2-include: "../device.h" rejected, own-dir "events.h" and "pump_core/...
 const shell = gate.checkFile(path.join(P, 'qt/shell.cpp'), { ctx });
 check('L10: #include <QEventLoop>, QEventLoop, BlockingQueuedConnection, ->wait( = 4 findings', shell.filter((f) => f.gate === 'L10-blocking').length === 4, String(shell.filter((f) => f.gate === 'L10-blocking').length));
 check('shell is not a pure core: QObject/QThread allowed there', !shell.some((f) => f.gate === 'L2-purity'));
+// DOCS: generic vocabulary, project patterns, off switch
+const leaky = gate.checkFile(path.join(P, 'docs/leaky.md'), { ctx }).filter((f) => f.gate === 'DOCS');
+check('DOCS: Claude, .claude, AGENTS.md and the C:\\ path found (4), DR-0042 not a default pattern', leaky.length === 4, JSON.stringify(leaky.map((f) => f.message)));
+const ctxDocs = gate.makeContext({ root: P, cfg: Object.assign({}, ctx.cfg, { packConfig: { 'controller-kernel': { docsExtraPatterns: ['\\bDR-\\d'] } } }) });
+check('DOCS: packConfig docsExtraPatterns adds DR-0042', gate.checkFile(path.join(P, 'docs/leaky.md'), { ctx: ctxDocs }).filter((f) => f.gate === 'DOCS').length === 5);
+const ctxDocsOff = gate.makeContext({ root: P, cfg: Object.assign({}, ctx.cfg, { packConfig: { 'controller-kernel': { docsGate: 'off' } } }) });
+check('DOCS: packConfig docsGate off disables it', gate.checkFile(path.join(P, 'docs/leaky.md'), { ctx: ctxDocsOff }).length === 0);
 // literalGate off
 const ctxOff = gate.makeContext({ root: P, cfg: Object.assign({}, ctx.cfg, { packConfig: { 'controller-kernel': { literalGate: 'off' } } }) });
 check('packConfig literalGate off disables L9', gate.checkFile(path.join(P, 'pump_core/warn_only.cpp'), { ctx: ctxOff }).length === 0);

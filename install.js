@@ -160,8 +160,17 @@ class Installer {
       .concat(this.cfg.packs.filter((p) => this.exists(this.packDir(p))).map((p) => ({ name: p, dir: this.packDir(p) })));
     for (const L of layers) {
       const isPack = L.name !== 'core';
-      // rules: core flat, packs under rules/<pack>/
-      this.copyTree(path.join(L.dir, 'rules'), isPack ? path.join(this.claude, 'rules', L.name) : path.join(this.claude, 'rules'));
+      // rules: core flat, packs under rules/<pack>/; packConfig.<pack>.skipRules leaves named
+      // rule files out (a project whose own policy replaces one, such as a non-GoogleTest
+      // harness and cpp-testing.md); the manifest cleanup removes a copy activated earlier.
+      const pcfg = (isPack && this.cfg.packConfig && this.cfg.packConfig[L.name]) || {};
+      const skip = new Set((pcfg.skipRules || []).map((n) => String(n).toLowerCase()));
+      for (const n of skip) if (!this.exists(path.join(L.dir, 'rules', n))) this.note('WARNING: packConfig.' + L.name + '.skipRules names "' + n + '", which the pack does not ship');
+      const ruleDst = isPack ? path.join(this.claude, 'rules', L.name) : path.join(this.claude, 'rules');
+      this.copyTree(path.join(L.dir, 'rules'), ruleDst, (f) => !skip.has(path.basename(f).toLowerCase()));
+      // third-party licences of a pack sit next to its activated rules and skills (core rule 02)
+      const licences = isPack && this.exists(L.dir) ? fs.readdirSync(L.dir).filter((f) => /^LICEN[CS]E/i.test(f)) : [];
+      if (licences.length && this.exists(path.join(L.dir, 'rules'))) for (const f of licences) this.copyFile(path.join(L.dir, f), path.join(ruleDst, f));
       // agents, commands: flat; a pack file with the same name overrides core (noted)
       for (const kind of ['agents', 'commands']) {
         const src = path.join(L.dir, kind);
@@ -180,6 +189,8 @@ class Installer {
           const dst = path.join(this.claude, 'skills', e.name);
           if (isPack && this.exists(dst) && this.managed.has(this.rel(path.join(dst, 'SKILL.md')))) this.note('pack "' + L.name + '" overrides skill ' + e.name);
           this.copyTree(path.join(sk, e.name), dst);
+          const own = fs.readdirSync(path.join(sk, e.name)).some((f) => /^LICEN[CS]E/i.test(f));
+          if (!own) for (const f of licences) this.copyFile(path.join(L.dir, f), path.join(dst, f));
         }
       }
       // hooks: core flat (lib/, scripts, tests), packs under hooks/<pack>/

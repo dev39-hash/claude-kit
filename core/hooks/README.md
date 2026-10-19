@@ -33,7 +33,10 @@ human in chat. A project that wants the dialog to stay the gate sets `askToDeny`
 | `askBeforeEdit` | Edit/Write or a shell write into `paths.askBeforeEdit` | yes |
 | `localOnlyDelete` | a delete inside `paths.localOnly` | yes |
 | `destructiveGit` | `reset --hard`, `clean`, `checkout --`, `restore`, `branch -D`, `rebase`, `--amend`, `stash drop`, ... | yes |
-| `remote`, `outsideDelete`, `unresolvedDelete`, `inPlaceEdit`, `killByName`, `kitConfig` | remote changes, deletes outside the project or of unresolvable targets, `sed -i`, kill by name, `kit.config.json` / `settings.json` edits | no (add them to the list to deny) |
+| `outsideDelete`, `unresolvedDelete` | a delete outside the project, or of a target the guard cannot resolve | yes |
+| `killByName` | a kill by process name | yes |
+| `outsideEdit` | an Edit/Write outside the project (temp folders, scratchpad, Claude's memory folders free) | yes |
+| `remote`, `inPlaceEdit`, `kitConfig`, `projectCommand` | remote changes, `sed -i`, `kit.config.json` / `settings.json` edits, `commands.ask` matches | no (add them to the list to deny) |
 
 In the attended modes (`default`, `acceptEdits`, `plan`) nothing changes. The PowerShell twin
 (`hooks-powershell`) applies the same rule to its own asks.
@@ -53,6 +56,8 @@ stderr.
 | `git.identity`, `deniedEmails`, `forbiddenPhrases`, `push`, `forcePush`, `gitExe` | guard-shell |
 | `paths.readOnly`, `askBeforeEdit`, `localOnly`, `protectedDelete`, `memoryMirror`, `forbiddenTreeFiles`, `tempRoots` | guard-shell, guard-edit |
 | `processes.neverKill`, `neverLaunch` | guard-shell |
+| `paths.foreignTrees` | guard-shell, guard-edit (other checkouts, standby copies: never written or deleted) |
+| `commands.deny`, `commands.ask` | guard-shell (the project's own command rules, `{ match, reason }`) |
 | `hooks.autoMode.modes`, `askToDeny` | guard-shell, guard-edit (asks that become denies in unattended modes) |
 | `environment.persistentWrites`, `protectedVars` | guard-shell (setx, `[Environment]::SetEnvironmentVariable(.., User\|Machine)`, HKCU/HKLM Environment registry writes; `$env:X` is free) |
 | `encoding.asciiExtensions`, `asciiExempt`, `asciiRepoMarkdown`, `codePage` | guard-edit, guard-shell (PowerShell writes), format |

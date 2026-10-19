@@ -16,8 +16,9 @@ paths:
 ## Before any commit
 
 - No secrets, licence keys or absolute user paths in tracked files.
-- Every external input validated once at the boundary: image size and type, region bounds,
-  config ranges, schema version, string lengths, frame checksums.
+- Every external input validated once at the boundary (for example sizes and types, region
+  bounds, config ranges, schema versions, string lengths, frame checksums, indices from a
+  message).
 - No allocation whose size comes unbounded from file or wire content.
 - Paths read from configs never escape their intended directory.
 - No `system()`, `popen()` or shell-outs in library code.
@@ -31,15 +32,16 @@ paths:
 - `reinterpret_cast` only in SIMD load/store helpers or at an SDK boundary, with a comment on
   alignment and layout; no C-style casts.
 - Every member initialised at its declaration.
-- Bounds: layer and pyramid indices, point counts vs buffer sizes, regions vs images; `.at()`
-  or an explicit check on any index that comes from a config or a file.
+- Bounds: `.at()` or an explicit check on every index that comes from a config, a file, a
+  message or another object (layer or role indices, counts against buffer sizes, regions
+  against their parent).
 
 ## Undefined behaviour
 
-- No signed overflow on index math (`size_t` or `int64_t` for pixel counts).
-- No reading uninitialised buffers (a result map must be written before it is scanned).
-- No dangling views after the parent was resized, cleared or moved; no pointers into a
-  container across a mutation of that container.
+- No signed overflow on index math (`size_t` or `int64_t` for large counts).
+- No reading uninitialised memory (a buffer is written before it is read).
+- No dangling views after the parent was resized, cleared or moved; no pointer or reference
+  into a container or a state object kept across a call that may mutate it.
 - Threads: no shared mutable state in a parallel region without a reduction or a critical
   section; results independent of the thread count.
 

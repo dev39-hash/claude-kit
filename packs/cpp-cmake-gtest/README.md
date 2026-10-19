@@ -45,7 +45,9 @@ CTest, on MSVC, GCC or Clang. Derived from the `.claude` folders of two earlier 
     "testDataVar": "TEST_DATA_DIR",
     "goldenDir": "tests/golden",
     "updateGoldenFlag": "--update-golden",
-    "suppressRegeneration": false
+    "suppressRegeneration": false,
+    "testCountRegex": "",
+    "skipRules": []
   }
 }
 ```
@@ -78,6 +80,15 @@ cache or the set of source files changed (see below). A raw `cmake --build` does
   slot lock stays) and configures from scratch. Deleting only `CMakeCache.txt` is not enough
   after a move: MSBuild `*.lastbuildstate` keeps the old path (MSB8028).
 - Children run with `MSBUILDDISABLENODEREUSE=1`: no idle MSBuild node outlives the run.
+- A `-D` forces a configure only when the cache holds another value (booleans as ON/OFF, paths
+  with forward slashes), so a command that always passes the same options does not reconfigure.
+- `testCountRegex` (groups: tests, failures) is for a test program that reports its own count
+  behind one CTest entry: ctest then runs with `-V` and the test summary adds
+  `program: N test(s), F failure(s)`, or `program count NOT FOUND`.
+- `skipRules` leaves named rule files of this pack out of `.claude/rules/cpp-cmake-gtest/` (for
+  example `cpp-testing.md` in a project with its own harness); `install.js --update` removes a
+  copy activated earlier. The pack's licence file is copied next to its activated rules and
+  skills.
 - The build summary counts compiled files; an up-to-date build says `NOTHING COMPILED (up to
   date: not compile evidence ...)`, so "no work to do" is never reported as a compile.
 - `--slot <tag> --empty-slot` takes a slot without a cache (a true first build);

@@ -25,8 +25,9 @@ paths:
 
 ## Files
 
-- 200-400 lines typical, 800 lines as the soft ceiling; split a reference file that is larger
-  when porting (one stage per file).
+- 200-400 lines typical, 800 lines as the soft ceiling unless `project/rules.md` sets another
+  limit or names files that stay larger (a handler table, generated code); split a reference
+  file that is larger when porting (one stage per file).
 - One class per header; header name is the class name in the project's file-name style.
 - Organise by feature, not by type. Public headers under the project's include root include
   only the libraries the project allows (`project/rules.md`).
@@ -36,7 +37,8 @@ paths:
 - The project's standard (`project/rules.md`, usually C++17) and nothing newer, even when
   one compiler would accept it. `std::void_t` + `static_assert` instead of concepts;
   no `<format>` before every target compiler ships it.
-- `constexpr` constants, never `#define` (include guards excepted); `enum class`;
+- `constexpr` constants, never `#define` (include guards and the macros `project/rules.md`
+  names, for example a test-registration macro, excepted); `enum class`;
   `auto` only when the type is obvious from the right-hand side.
 - Structured bindings, `std::optional`, `std::string_view` where they clarify.
 

@@ -36,3 +36,11 @@ policy field or a derived function is missing; fix the shape, not the symptom.
 Changing a contract, a law or a block's value set needs an ADR first (core rule; the
 `architecture-decision-records` skill). The gates are early feedback; the build and the tests
 are the source of truth.
+
+The implementer's Dev notes add two lines for a task that touches a core, the kernel or the
+shell:
+
+```text
+GATES:  gate-check --all: <errors>/<warnings> (L9 warnings listed or explained)
+LAWS:   <each law the change touches, and why it still holds>
+```

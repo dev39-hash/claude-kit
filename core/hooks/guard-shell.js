@@ -3,7 +3,8 @@
 // One guard for everything a shell command can break, driven by .claude/kit.config.json:
 //
 //   deny  - deletes of protected locations (.git/, .claude/ and its kit files, the memory mirror,
-//           paths.readOnly, the project root), `git clean -x`;
+//           paths.readOnly, the project root), `git clean -x`; deletes and writes inside
+//           paths.foreignTrees (other checkouts, standby copies); commands.deny matches;
 //           writes, moves or copies into paths.readOnly or the kit files (mv, cp, robocopy,
 //           sed -i, tee, Set-Content, Out-File, redirections);
 //           an AI attribution line or a forbidden phrase in a commit message or PR body;
@@ -25,6 +26,7 @@
 //           with a User or Machine target, HKCU/HKLM Environment registry keys), which outlives
 //           the session (environment.persistentWrites); a name in environment.protectedVars
 //           is denied, a name the guard cannot read asks.
+//           commands.ask matches.
 //   allow - everything else; no output is written (the normal permission flow continues).
 //
 // Commands are tokenised like a shell (quotes, ; && || |, redirections, heredocs, here-strings)
@@ -261,6 +263,30 @@ class Guard {
 
   relOf(abs) { return P.rel(abs, this.root); }
 
+  // paths.foreignTrees: absolute folders outside the project that are never changed from it
+  // (another checkout, the standby copy left behind by a move). Returns the matching entry.
+  foreignOf(abs) {
+    return (this.cfg.paths.foreignTrees || []).find((t) => P.under(abs, P.norm(String(t).replace(/\/+$/, '')))) || null;
+  }
+
+  // commands.deny / commands.ask: the project's own command rules, each { match, reason }; match
+  // is a case-insensitive regex tested against every simple command (name and arguments, as
+  // tokenised, nested shells included). controller-kernel: "git init" waits for the human.
+  projectCommands(name, args) {
+    const cmds = this.cfg.commands || {};
+    const line = [name].concat(args).join(' ');
+    for (const [kind, list] of [['deny', cmds.deny], ['ask', cmds.ask]]) {
+      for (const rule of list || []) {
+        let re;
+        try { re = new RegExp(String(rule.match || ''), 'i'); } catch (_) { continue; }
+        if (!rule.match || !re.test(line)) continue;
+        const why = (rule.reason || 'a project command rule') + ' (commands.' + kind + ' "' + rule.match + '").';
+        if (kind === 'deny') this.d.deny(line.slice(0, 80) + ': ' + why);
+        else this.d.ask(line.slice(0, 80) + ': ' + why, 'projectCommand');
+      }
+    }
+  }
+
   // A move is a delete of its source only when the data leaves its protected place. Moving a
   // file inside the same paths.localOnly / paths.protectedDelete roots (closing a task:
   // .claude/tasks/active/T-1.md -> .claude/tasks/done/, seen denied in mc_protocol and
@@ -292,6 +318,8 @@ class Guard {
       const abs = r.abs;
       if (P.inTemp(abs, this.temps)) continue;
       if (!P.under(abs, this.root)) {
+        const ft = this.foreignOf(abs);
+        if (ft) { this.d.deny('delete inside "' + ft + '" (paths.foreignTrees): another checkout or a standby copy, never changed from this project (' + t0 + ').'); continue; }
         this.d.ask(r.relative
           ? 'delete with a relative target (' + t0 + ') while the working directory is outside the project (' + cur + ').'
           : 'delete outside the project folder (' + t0 + '). Outside the project nothing is deleted without the human\'s yes.', 'outsideDelete');
@@ -323,7 +351,11 @@ class Guard {
     const r = P.resolveTarget(t0, cur);
     if (r.err) return;
     const abs = r.abs;
-    if (!P.under(abs, this.root)) return;
+    if (!P.under(abs, this.root)) {
+      const ft = this.foreignOf(abs);
+      if (ft) this.d.deny(verb + ' into "' + ft + '" (paths.foreignTrees): another checkout or a standby copy, never written from this project (' + t0 + ').');
+      return;
+    }
     const ro = P.matchAny(abs, this.root, this.cfg.paths.readOnly);
     if (ro) { this.d.deny(verb + ' into the read-only path "' + ro + '" (' + t0 + '). paths.readOnly is never written.'); return; }
     if (this.kitAbs.some((k) => P.under(abs, k))) {
@@ -679,6 +711,7 @@ class Guard {
     }
     for (const r of redirects) this.checkWriteTarget(r, c.cur, 'shell redirection', true);
     if (!name) return null;
+    this.projectCommands(name, args);
 
     if (name === 'get-process' || name === 'gps' || name === 'ps') {
       this.pendingNeverKill = !!(this.neverKillRe && this.neverKillRe.test(args.join(' ')));

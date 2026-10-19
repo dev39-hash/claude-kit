@@ -222,10 +222,35 @@ try {
         }
     }
 
+    # ---- project command rules (commands.deny / commands.ask: { match, reason }) -----------------
+    foreach ($kind in @('deny', 'ask')) {
+        foreach ($rule in @(Get-Prop $cfg @('commands', $kind) @())) {
+            $m = [string](Get-Prop $rule @('match') '')
+            if (-not $m) { continue }
+            $hit = $false
+            try { $hit = $cmd -match ('(?i)' + $m.TrimStart('^')) } catch { $hit = $false }
+            if ($hit) {
+                $why = [string](Get-Prop $rule @('reason') 'a project command rule')
+                if ($kind -eq 'deny') { Deny ($why + ' (commands.deny "' + $m + '").') } else { Ask ($why + ' (commands.ask "' + $m + '").') 'projectCommand' }
+            }
+        }
+    }
+
+    # ---- foreign trees (paths.foreignTrees): never written or deleted from this project --------
+    $normCmd = $cmd -replace '\\', '/'
+    foreach ($t in @(Get-Prop $cfg @('paths', 'foreignTrees') @())) {
+        $ft = ([string]$t -replace '\\', '/').TrimEnd('/')
+        if (-not $ft) { continue }
+        $writes = '(?i)(^|[\s;&|(])(rm|rmdir|rd|del|erase|Remove-Item|ri|mv|move|Move-Item|cp|copy|Copy-Item|Set-Content|Add-Content|Out-File|New-Item|robocopy|xcopy)(\s|$)|>'
+        if (($normCmd -match $writes) -and ($normCmd -match ('(?i)' + (Esc $ft) + '(/|["''\s]|$)'))) {
+            Deny ('the command touches "' + $t + '" (paths.foreignTrees): another checkout or a standby copy, never changed from this project.')
+        }
+    }
+
     # ---- unattended permission modes (auto, bypassPermissions): listed asks become denies ------
     $permMode = [string](Get-Prop $hookInput @('permission_mode') '')
     $amModes = @(Get-Prop $cfg @('hooks', 'autoMode', 'modes') @('auto', 'bypassPermissions'))
-    $amCats = @(Get-Prop $cfg @('hooks', 'autoMode', 'askToDeny') @('push', 'envWrite', 'askBeforeEdit', 'localOnlyDelete', 'destructiveGit'))
+    $amCats = @(Get-Prop $cfg @('hooks', 'autoMode', 'askToDeny') @('push', 'envWrite', 'askBeforeEdit', 'localOnlyDelete', 'destructiveGit', 'outsideDelete', 'unresolvedDelete', 'killByName', 'outsideEdit'))
     if ($permMode -and ($amModes -contains $permMode)) {
         $keep = @()
         for ($i = 0; $i -lt $script:Asks.Count; $i++) {

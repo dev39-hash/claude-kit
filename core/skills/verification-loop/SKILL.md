@@ -51,8 +51,13 @@ exists. Otherwise `SKIPPED (<tool> missing)`. Findings are listed, not fixed her
 ## Phase 6: Gates
 
 `<gates>` when the project or a pack has them (ASCII, vocabulary, docs policy, layering,
-purity). Also: `git grep -I -nP "[^\x00-\x7F]"` over the ASCII-covered files; a docs grep for
-`.claude`, `Claude`, `agent`, phase names, absolute paths under `paths.docsGateRoots`.
+purity). Also: `git grep -I -nP "[^\x00-\x7F]"` over the ASCII-covered files; a docs grep over
+`paths.docsGateRoots` and every tracked `README.md` for `.claude`, `Claude`, `Anthropic`,
+`AGENTS.md`, `CLAUDE.md`, `agent`, phase names, absolute machine paths (`[A-Za-z]:\`, `/c/Users`)
+and the internal record ids the project bans (`project/rules.md`; for example `ADR-n`, `DR-n`,
+`WP-`):
+`git grep -nIiE "\.claude|\bclaude\b|anthropic|agents?\.md|[A-Za-z]:\\\\|/c/users" -- README.md '*/README.md' docs/`.
+The `controller-kernel` pack's `DOCS` gate checks the fixed part of this list on every edit.
 
 **Diff-only form.** On a project with pre-existing findings (an old code base, a tracked docs
 regime that uses phase names on purpose) the whole-tree grep is red by construction. Then:

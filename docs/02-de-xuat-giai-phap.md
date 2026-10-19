@@ -190,9 +190,9 @@ Ghi chú: Claude Code chỉ tự động đọc `.claude/rules/`, `.claude/agent
 ## 6. Tiến độ hiện tại và việc tiếp theo
 
 Tình trạng repo `claude-kit` (`main` = `d68394b`): 8 commit sau bản khởi tạo; bộ test
-`node core/hooks/test-hooks.js` 304/304, `packs/controller-kernel/hooks/test-kernel-gates.js`,
+`node core/hooks/test-hooks.js` 320/320, `packs/controller-kernel/hooks/test-kernel-gates.js`,
 `packs/work-package/hooks/test-wt-guard.js` 18/18, `packs/docs-spec-driven/tools/test-docs-gate.js`,
-`packs/hooks-powershell/hooks/test-hooks.ps1` 96/96 (Windows PowerShell 5.1.26100) đều 0 fail. Cài thử 5 pack cùng lúc
+`packs/hooks-powershell/hooks/test-hooks.ps1` 102/102 (Windows PowerShell 5.1.26100) đều 0 fail. Cài thử 5 pack cùng lúc
 vào thư mục tạm và `--update` lại đều đúng layout.
 
 Bài học từ dry-run ncr_picking đã vào kit:
@@ -254,6 +254,24 @@ Bài học từ dry-run ncr_picking đã vào kit:
     mục 9 (lỗi dữ liệu của retrofit, project đã sửa trong K-001), mục 10 (classifier của harness; `probe.js`
     thay thế), mục 11 (scratch giờ chứa log của `build.js`). Mục 3 (kill theo tên tool build là deny) và mục 5
     (khái niệm batch) để project tự giữ: hook riêng của mc_protocol và quy tắc trong `project/rules.md`.
+- Dry-run controller-kernel (2026-10-19), đã sửa (K35–K45; mục 3 của report đã sửa trong K32):
+  - K35: `hooks.autoMode.askToDeny` mặc định thêm `outsideDelete`, `unresolvedDelete`, `killByName` và
+    `outsideEdit`; rule 04 sửa lại cho khớp hook (target không resolve được thì ask, auto mode thì deny).
+  - K36: `guard-edit` hỏi khi sửa file ngoài project (tự do: scratchpad, temp của Claude, thư mục memory
+    của Claude); `paths.foreignTrees` (bản standby, checkout khác) bị deny cho edit, ghi và xóa qua shell.
+  - K37: `commands.deny` / `commands.ask` (`{ match, reason }`) cho lệnh riêng của project, vd `git init`.
+  - K38: gate `DOCS` trở lại trong pack controller-kernel (từ vựng cố định + `docsExtraPatterns`,
+    `docsGate: off`); grep của `verification-loop` Phase 6 thêm `Anthropic`, `AGENTS.md`, `CLAUDE.md`, path.
+  - K39: `controller-reviewer` có lại dòng repo policy; rule `kernel-laws` thêm dòng GATES/LAWS cho Dev notes;
+    rule `kernel-test-kit` dặn build trong slot và lấy số test từ chương trình. Mục 11 (Qt 5/6) đã có trong rule.
+  - K40: `build.js`: `-D` chỉ ép configure khi khác giá trị trong cache; `testCountRegex` đọc số test của
+    chương trình sau một entry CTest (`program: N test(s), F failure(s)`).
+  - K41: `packConfig.<pack>.skipRules` bỏ rule của pack không hợp project (vd `cpp-testing.md` cho project không
+    dùng GoogleTest); `--update` gỡ bản đã kích hoạt; rule `cpp-testing` ghi rõ phạm vi.
+  - K42: các rule C++ của `cpp-cmake-gtest` bỏ giả định về thư viện xử lý ảnh (pyramid, SIMD, angle...) thành
+    ví dụ có điều kiện; giới hạn 800 dòng và cấm `#define` nhường cho `project/rules.md`.
+  - K43: licence của pack được chép cạnh rule và skill đã kích hoạt (rule 02).
+  - Thuộc lớp project (đã sửa trong controller-kernel): mục 6 (force push), 8 (`walkDirs`), 19–21.
 - `test-hooks.ps1` chạy xanh trên Windows PowerShell 5.1: 5.1 biến stderr của tiến trình con thành
   `NativeCommandError` khi stream bị redirect, harness đặt `ErrorActionPreference = Stop` nên chết ở case
   fail-open. Harness hạ xuống `Continue` quanh mỗi lời gọi hook; bản thân ba hook không bị ảnh hưởng

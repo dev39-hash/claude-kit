@@ -31,6 +31,11 @@
 //                         processEvents
 //   WARN-PRAGMA  error    code and build files: no #pragma warning(disable, __pragma(warning(disable,
 //                         #pragma GCC|clang diagnostic ignored, /wdNNNN, -Wno-...
+//   DOCS         error    repo documentation (README.md anywhere, paths.docsGateRoots, default
+//                         README.md and docs/) is user documentation only: no .claude, Claude,
+//                         Anthropic, AGENTS.md / CLAUDE.md, absolute machine paths, plus the
+//                         project's packConfig docsExtraPatterns (for example ADR or work-item
+//                         ids). packConfig docsGate: "error" (default) | "off"
 //   L9-literal   warning  pure core .cpp files and non-policy headers: numeric literals other than
 //                         0 and 1 (numbers are Policy data); not in enum bodies, array sizes,
 //                         preprocessor lines, constexpr / static_assert, *Policy structs.
@@ -72,6 +77,10 @@ const GATES = {
   'WARN-PRAGMA': {
     severity: 'error', law: 'Warnings are errors on every compiler (never silenced by pragma or flag)',
     hint: 'fix the cause of the warning in the code; do not disable it with a pragma, /wd or -Wno-.',
+  },
+  'DOCS': {
+    severity: 'error', law: 'Repository documentation is user documentation only',
+    hint: 'say what the kernel does and how to use it; no tool, agent, process or machine names, no ids of internal records.',
   },
   'L9-literal': {
     severity: 'warning', law: 'L9 (numbers are policy, policy is data)',
@@ -136,6 +145,17 @@ const BLOCKING = [
 // ---- context: config + compiled matchers --------------------------------------------------------
 function slash(p) { return String(p).replace(/\\/g, '/'); }
 
+// Repo documentation vocabulary (restored from the project-written engine the pack came from).
+const DOC_PATTERNS = [
+  [/\.claude\b/gi, '.claude'],
+  [/\bClaude\b/g, 'Claude'],
+  [/\bAnthropic\b/gi, 'Anthropic'],
+  [/\bAGENTS?\.md\b/gi, 'AGENTS.md'],
+  [/\bCLAUDE\.md\b/gi, 'CLAUDE.md'],
+  [/(?<![A-Za-z0-9])[A-Za-z]:\\(?=[A-Za-z0-9_.-])/g, 'absolute Windows path'],
+  [/(?<![\w])\/[a-zA-Z]\/Users\b/gi, 'absolute path (/c/Users)'],
+];
+
 function makeContext(opts) {
   const o = opts || {};
   const P = env.lib('paths');
@@ -156,6 +176,10 @@ function makeContext(opts) {
     policyRes: res(pc.policyFiles),
     impure: new Set(IMPURE_STD_HEADERS.concat(pc.extraImpureHeaders || [])),
     skip: ['.git/', '.claude/', 'node_modules/'].concat((cfg.build && cfg.build.buildDirPatterns) || []),
+    docPatterns: DOC_PATTERNS.concat((pc.docsExtraPatterns || []).map((p) => {
+      try { return [new RegExp(String(p), 'g'), 'project pattern ' + p]; } catch (_) { return null; }
+    }).filter(Boolean)),
+    docRoots: (cfg.paths && cfg.paths.docsGateRoots) || ['README.md', 'docs/'],
   };
 }
 
@@ -193,6 +217,8 @@ function classify(info, ctx) {
     coreDir: isCpp && coreDir,
     ownDirName: dirs.length ? dirs[dirs.length - 1] : '',
     shell: isCpp && shell,
+    docs: ctx.pc.docsGate !== 'off' && info.inside && ext === '.md' &&
+      (base === 'README.md' || !!ctx.P.matchAny(nAbs, nRoot, ctx.docRoots)),
     ascii,
     skipped: info.inside && !!ctx.P.matchAny(nAbs, nRoot, ctx.skip),
   };
@@ -409,12 +435,24 @@ function checkFile(file, opts) {
   const info = relInfo(file, ctx);
   const c = classify(info, ctx);
   if (c.skipped) return [];
-  if (!c.ascii && !c.isCpp && !c.isBuild) return [];
+  if (!c.ascii && !c.isCpp && !c.isBuild && !c.docs) return [];
   let buf;
   try { buf = fs.readFileSync(info.abs); } catch (_) { return []; }
   const display = info.inside ? info.rel : slash(info.abs);
   const out = [];
   if (c.ascii) out.push(...gateAscii(buf, display));
+  if (c.docs) {
+    const text = buf.toString('utf8');
+    const at = lineIndex(text);
+    for (const [re0, what] of ctx.docPatterns) {
+      const re = new RegExp(re0.source, re0.flags.includes('g') ? re0.flags : re0.flags + 'g');
+      let m;
+      while ((m = re.exec(text))) {
+        out.push(make('DOCS', display, at(m.index), 'repo documentation must not mention "' + m[0] + '" (' + what + ')'));
+        if (m[0].length === 0) re.lastIndex++;
+      }
+    }
+  }
   if (c.isCpp) {
     const text = buf.toString('utf8');
     const view = blankText(text);

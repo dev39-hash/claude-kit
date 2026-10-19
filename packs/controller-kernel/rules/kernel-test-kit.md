@@ -53,6 +53,9 @@ the kernel's worked example: a `Harness` that wraps one core, records effects an
 - Never weaken or delete a check to get green; do not test private helpers; a failing test is
   never edited to pass. Report the disagreement instead.
 - Coverage is not measured or gated; completeness of the (State x Event) grid replaces it.
+- RED and GREEN runs build in a slot (`build.js all --slot <tag> --release-slot`, the tag
+  from the brief), never in the leader's tree; the count comes from the test program itself
+  (`packConfig.cpp-cmake-gtest.testCountRegex` makes `build.js` print it), not from CTest.
 - The tester's Test report adds two lines for a core task: `Sweep: <samples>/<alternatives>,
   <states> prepared states, green | failing pairs` and `Stale probes: <request kinds and timer
   keys covered>`.

@@ -17,8 +17,9 @@ $config = @{
     project   = @{ name = 't' }
     models    = @{ worker = 'sonnet'; reviewer = 'opus'; forceAll = $false; allowFork = $false }
     git       = @{ identity = @{ name = ''; email = '' }; deniedEmails = @('denied@example.com'); aiAttribution = 'deny'; forbiddenPhrases = @('WIP junk'); push = 'ask'; forcePush = 'ask-with-lease' }
-    paths     = @{ readOnly = @('reference_source/'); localOnly = @('.wt/', 'product_release/'); protectedDelete = @('.git/', '.claude', '.claude/memory/'); memoryMirror = '.claude/memory' }
+    paths     = @{ readOnly = @('reference_source/'); localOnly = @('.wt/', 'product_release/'); protectedDelete = @('.git/', '.claude', '.claude/memory/'); memoryMirror = '.claude/memory'; foreignTrees = @('D:/standby/proj/') }
     processes = @{ neverKill = @('machine_ui', 'machine_runtime'); neverLaunch = @('machine_ui', 'machine_runtime') }
+    commands  = @{ deny = @(@{ match = '^git init\b'; reason = 'the repository starts when the human says so' }); ask = @(@{ match = '^make\s+install\b'; reason = 'installs outside the tree' }) }
     environment = @{ persistentWrites = 'ask'; protectedVars = @('MACHINE_*', 'PATH') }
     encoding  = @{ codePage = 'cp932'; asciiExtensions = @('.cpp', '.h', '.pro', '.pri', '.ui', '.ps1') }
 }
@@ -119,7 +120,14 @@ $cases = @(
     (ShellCase 'git reset --hard HEAD~1' 'deny' 'Bash' 'auto'),
     (ShellCase 'rm -rf .wt/slot1' 'deny' 'Bash' 'auto'),
     (ShellCase 'setx FOO_DIR C:/x' 'deny' 'Bash' 'auto'),
-    (ShellCase 'taskkill /IM other_tests.exe /F' 'ask' 'Bash' 'auto'),
+    (ShellCase 'taskkill /IM other_tests.exe /F' 'deny' 'Bash' 'auto'),
+    # project command rules and foreign trees
+    (ShellCase 'git init' 'deny'),
+    (ShellCase 'git status' 'allow'),
+    (ShellCase 'make install' 'ask'),
+    (ShellCase 'rm -rf D:/standby/proj/build' 'deny'),
+    (ShellCase 'Set-Content -Path D:\standby\proj\a.txt -Value x' 'deny' 'PowerShell'),
+    (ShellCase 'Get-Content D:/standby/proj/README.md' 'allow' 'PowerShell'),
     (ShellCase 'git remote add up https://example.com/x.git' 'ask' 'Bash' 'auto'),
     (ShellCase 'git status' 'allow' 'Bash' 'auto'),
     # persistent environment variables (K19)

@@ -49,6 +49,9 @@ block below, returned complete in your final reply; the leader pastes it into th
   `controller-design` skill; no handler before the three derived functions have tables.
 - **C++** lifetime, `std::variant` visitation exhaustiveness, integer conversions a strict
   warning level flags, header hygiene, ASCII, Doxygen on public symbols.
+- **Repo policy** (when the project's rules define one, for example "user docs only"): every
+  changed `README.md`, `docs/` page and comment respects it; the `DOCS` gate covers the fixed
+  vocabulary, the rest (people, roles of people, plans, origin project) is read by you.
 
 ## Severity
 
