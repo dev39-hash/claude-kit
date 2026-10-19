@@ -38,13 +38,25 @@ does steps 1-3; the rest is by hand.
    - `task-classification.md` - start from the defaults, add project classes;
    - `definition-of-done.md` - the checklist Gate 2 uses;
    - `build-env.md` - this machine's proven commands and gotchas.
+   Facts copied from old notes (test totals, skip counts, timings, which environment
+   variables exist) are marked "unverified" until a run in this session shows them: the
+   image_matching retrofit carried a wrong per-configuration total (687 / 775 / 687; every
+   configuration ran 775) and an `OpenCV_DIR` user variable that did not exist. Read an
+   environment variable back with its name printed next to the value; take totals from
+   `ctest -N` on a fresh build.
+   A configure argument that names the project path uses `${sourceDir}`, a per-machine
+   directory `$env{NAME}` (pack cpp-cmake-gtest), so moving the tree needs no config edit.
+   `install.js --update` warns when a path sits in two lists that contradict each other.
 
 4. **Wire the memory and the leader.** Make sure `.claude/` is ignored through the global
    gitignore or `.git/info/exclude`. Edit the generated `CLAUDE.md`: read-first list, build
    commands, enabled packs (10-20 lines of project text, no status paragraphs).
 
 5. **Test the hooks.** `node .claude/hooks/test-hooks.js` must report 0 failures. Add a case
-   for every project-specific rule you put into `kit.config.json`.
+   for every project-specific rule you put into `kit.config.json`. Check the real config with
+   `node .claude/hooks/probe.js --batch <cases.txt>` (and `--mode auto` when the project runs
+   in auto mode): it prints each decision and runs nothing. Never prove a deny or an ask by
+   running the real command: the guards fail open, and in auto mode an ask is not a prompt.
 
 6. **Dry-run one small real task** end to end (plan -> gates -> done) before trusting the
    setup. Watch that each sub agent actually read the project layer: its section in the task

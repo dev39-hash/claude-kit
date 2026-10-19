@@ -63,9 +63,10 @@ fs.writeFileSync(path.join(P, '.claude', 'kit.manifest.json'), JSON.stringify({ 
   '.claude/tools/cpp-cmake-gtest/build.js', '.claude/references/definition-of-done.md'] }, null, 2));
 
 // ---- runner --------------------------------------------------------------------------------
-function runHook(hook, toolInput, cwd, toolName) {
+function runHook(hook, toolInput, cwd, toolName, mode) {
   const input = { tool_name: toolName || (hook === 'guard-shell' ? 'Bash' : hook === 'guard-edit' ? 'Write' : 'Agent'),
     tool_input: toolInput, cwd: cwd || P };
+  if (mode) input.permission_mode = mode;
   const r = spawnSync(process.execPath, [path.join(HOOKS, hook + '.js')], {
     input: JSON.stringify(input), encoding: 'utf8', timeout: 20000,
     env: Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: P, CLAUDE_SCRATCHPAD_DIR: scratch, CLAUDE_KIT_CONFIG: '' }),
@@ -88,6 +89,8 @@ function pwsh(cmd, expect, cwd) { return ['guard-shell', cmd, expect, cwd, 'Powe
 function edit(file, text, expect) { return ['guard-edit', { file_path: file, new_string: text === undefined ? 'x' : text }, expect]; }
 function write(file, content, expect) { return ['guard-edit', { file_path: file, content }, expect, undefined, 'Write']; }
 function agent(ti, expect) { return ['subagent-model-guard', ti, expect]; }
+// the same case run in a permission mode (hook input permission_mode)
+function inMode(mode, c) { const o = c.slice(); while (o.length < 5) o.push(undefined); o[5] = mode; return o; }
 
 const HEREDOC_BAD = 'git commit -m "$(cat <<\'MSG\'\ndocs: x\n\nCo-Authored-By: Claude Opus <noreply@anthropic.com>\nMSG\n)"';
 const HEREDOC_OK = 'git commit -F - <<\'MSG\'\nfeat(core): add thing\n\nbody text\nMSG';
@@ -312,6 +315,27 @@ const cases = [
   bash('reg add "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment" /v MACHINE_QT_DIR /d x', 'deny'),
   bash('reg query "HKCU\\Environment" /v FOO_DIR', 'allow'),
   bash('powershell -Command "[Environment]::SetEnvironmentVariable(\'FOO_DIR\', \'C:/x\', \'User\')"', 'ask'),
+  // --- issue 1 (image_matching dry-run): in auto / bypassPermissions an ask of a listed category is a deny
+  inMode('auto', bash('git push origin main', 'deny')),
+  inMode('bypassPermissions', bash('git push --force-with-lease origin task/1', 'deny')),
+  inMode('auto', bash('git reset --hard HEAD~1', 'deny')),
+  inMode('auto', bash('git commit --amend --no-edit', 'deny')),
+  inMode('auto', bash('git clean -fd', 'deny')),
+  inMode('auto', bash('rm -rf .wt/slot1', 'deny')),
+  inMode('auto', bash('setx FOO_DIR C:/x', 'deny')),
+  inMode('auto', bash('cp src/a.cpp 3rdparty/lib/a.cpp', 'deny')),
+  inMode('auto', bash('sed -i "s/a/b/" src/a.cpp', 'ask')),
+  inMode('auto', bash('taskkill /IM other_tests.exe /F', 'ask')),
+  inMode('auto', bash('git remote add up https://example.com/x.git', 'ask')),
+  inMode('auto', bash('git status', 'allow')),
+  inMode('auto', bash('rm -rf build/x', 'allow')),
+  inMode('default', bash('git push origin main', 'ask')),
+  inMode('acceptEdits', bash('git push origin main', 'ask')),
+  inMode('plan', bash('git reset --hard', 'ask')),
+  inMode('auto', edit(PS + '/3rdparty/lib/a.cpp', 'x', 'deny')),
+  inMode('auto', edit(PS + '/.claude/kit.config.json', '{}', 'ask')),
+  inMode('auto', edit(PS + '/src/a.cpp', 'int a;', 'allow')),
+  inMode('default', edit(PS + '/3rdparty/lib/a.cpp', 'x', 'ask')),
   // --- guard-edit
   edit(PS + '/src/a.cpp', 'int a; // plain', 'allow'),
   edit(PS + '/reference_source/x/a.cpp', 'x', 'deny'),
@@ -372,12 +396,12 @@ const cases = [
 let failures = 0;
 let total = 0;
 for (const c of cases) {
-  const [hook, ti, expect, cwd, toolName] = c;
-  const label = typeof ti === 'string' ? ti : JSON.stringify(ti);
+  const [hook, ti, expect, cwd, toolName, mode] = c;
+  const label = (mode ? '[' + mode + '] ' : '') + (typeof ti === 'string' ? ti : JSON.stringify(ti));
   if (filter && !(hook + ' ' + label).includes(filter)) continue;
   total++;
   const toolInput = typeof ti === 'string' ? { command: ti } : ti;
-  const r = runHook(hook, toolInput, cwd, toolName);
+  const r = runHook(hook, toolInput, cwd, toolName, mode);
   const ok = r.decision === expect;
   if (!ok) failures++;
   const line = (ok ? 'ok   ' : 'FAIL ') + hook.padEnd(21) + expect.padEnd(6) + (ok ? '' : 'got ' + r.decision + '  ') + label.replace(/\n/g, '\\n').slice(0, 110);
@@ -457,6 +481,26 @@ unit('format.js is inert without a formatter config', () => {
   const before = fs.readFileSync(path.join(P, 'src', 'a.cpp'), 'utf8');
   fmt.main({ tool_input: { file_path: path.join(P, 'src', 'a.cpp') }, cwd: P });
   assert.strictEqual(fs.readFileSync(path.join(P, 'src', 'a.cpp'), 'utf8'), before);
+});
+unit('probe.js reports decisions without running the command', () => {
+  const batch = path.join(T, 'probe-cases.txt');
+  fs.writeFileSync(batch, [
+    '# expect kind argument',
+    'deny  shell git push --force origin main',
+    'ask   shell git push origin main',
+    'allow shell git status',
+    'deny  ps    setx MACHINE_QT_DIR C:/Qt',
+    'deny  edit  reference_source/x/a.cpp :: int a;',
+    'allow edit  src/a.cpp :: int a;',
+    'deny  agent reviewer sonnet',
+    'allow agent reviewer opus',
+  ].join('\n'));
+  const env = Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: P, CLAUDE_SCRATCHPAD_DIR: scratch, CLAUDE_KIT_CONFIG: '' });
+  const r = spawnSync(process.execPath, [path.join(HOOKS, 'probe.js'), '--batch', batch], { encoding: 'utf8', env });
+  assert.strictEqual(r.status, 0, r.stdout + r.stderr);
+  const auto = spawnSync(process.execPath, [path.join(HOOKS, 'probe.js'), 'shell', 'git push origin main', '--mode', 'auto'], { encoding: 'utf8', env });
+  assert.ok(/^deny/.test(auto.stdout), auto.stdout);
+  assert.ok(fs.existsSync(path.join(P, 'reference_source', 'x')));
 });
 unit('all hook sources are ASCII', () => {
   const walk = (d) => fs.readdirSync(d).flatMap((f) => { const p = path.join(d, f); return fs.statSync(p).isDirectory() ? walk(p) : [p]; });

@@ -371,6 +371,37 @@ class Installer {
     this.writeClaudeMd();
     this.cleanStale();
     this.checkGitIgnore();
+    this.lintConfig();
+  }
+
+  // Config entries that contradict each other (found in the image_matching dry-run: .vscode/
+  // was both local-only data and a build directory). Notes only; nothing is changed.
+  lintConfig() {
+    const norm = (p) => String(p).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+    const paths = this.cfg.paths || {};
+    const build = this.cfg.build || {};
+    const lists = {
+      'paths.localOnly': paths.localOnly || [],
+      'paths.readOnly': paths.readOnly || [],
+      'build.buildDirPatterns': build.buildDirPatterns || [],
+    };
+    const pairs = [['paths.localOnly', 'build.buildDirPatterns'], ['paths.readOnly', 'build.buildDirPatterns'], ['paths.readOnly', 'paths.localOnly']];
+    for (const [a, b] of pairs) {
+      const bs = new Set(lists[b].map(norm));
+      for (const p of lists[a]) {
+        if (!bs.has(norm(p))) continue;
+        if (a === 'paths.readOnly' && b === 'paths.localOnly') continue; // read-only local data is normal
+        this.note('WARNING: "' + p + '" is in both ' + a + ' and ' + b + ' (a build directory is regenerated, ' +
+          (a === 'paths.readOnly' ? 'read-only data is never written' : 'local-only data git cannot restore') + '); keep it in one list.');
+      }
+    }
+    const pc = (this.cfg.packConfig && this.cfg.packConfig['cpp-cmake-gtest']) || {};
+    const root = norm(this.target);
+    for (const a of pc.configureArgs || []) {
+      if (norm(a).includes(root)) {
+        this.note('NOTE: packConfig.cpp-cmake-gtest.configureArgs names the project path (' + a + '); write ${sourceDir} so a moved tree needs no edit.');
+      }
+    }
   }
 
   report() {

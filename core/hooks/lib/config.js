@@ -75,6 +75,10 @@ const DEFAULTS = {
   hooks: {
     runtime: 'node',
     failMode: 'open',
+    autoMode: {
+      modes: ['auto', 'bypassPermissions'],
+      askToDeny: ['push', 'envWrite', 'askBeforeEdit', 'localOnlyDelete', 'destructiveGit'],
+    },
     timeoutSeconds: { guard: 10, format: 30, stop: 15 },
   },
   packs: [],

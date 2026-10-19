@@ -34,9 +34,36 @@ class Decisions {
     this.event = event || 'PreToolUse';
     this.denies = [];
     this.asks = [];
+    this.askCats = [];
+    this.unattended = null;
   }
   deny(reason) { if (reason) this.denies.push(reason); return this; }
-  ask(reason) { if (reason) this.asks.push(reason); return this; }
+  // category: what kind of ask this is (push, envWrite, askBeforeEdit, localOnlyDelete,
+  // destructiveGit, kitConfig, inPlaceEdit, unresolvedDelete, killByName, remote); see
+  // escalate() and hooks.autoMode in kit.config.json.
+  ask(reason, category) { if (reason) { this.asks.push(reason); this.askCats.push(category || ''); } return this; }
+  // In a permission mode where an ask does not reach the human (auto, bypassPermissions: the
+  // command ran without a prompt on 2026-10-18), an ask of a listed category becomes a deny.
+  // Call once, after main(), with the hook input and the loaded config.
+  escalate(input, cfg) {
+    const mode = String((input && input.permission_mode) || '');
+    const am = (cfg && cfg.hooks && cfg.hooks.autoMode) || {};
+    const modes = am.modes || [];
+    const cats = am.askToDeny || [];
+    if (!mode || !modes.includes(mode)) return this;
+    const keep = [], keepCats = [];
+    for (let i = 0; i < this.asks.length; i++) {
+      if (cats.includes(this.askCats[i])) {
+        this.denies.push(this.asks[i] + ' Permission mode is "' + mode + '": an ask would not reach the human, so it is denied ' +
+          '(hooks.autoMode.askToDeny "' + this.askCats[i] + '"). Ask the human in chat; they run the command themselves or ' +
+          'approve it outside ' + mode + ' mode. Do not work around this guard.');
+      } else { keep.push(this.asks[i]); keepCats.push(this.askCats[i]); }
+    }
+    this.asks = keep;
+    this.askCats = keepCats;
+    this.unattended = mode;
+    return this;
+  }
   get decision() { return this.denies.length ? 'deny' : this.asks.length ? 'ask' : 'allow'; }
   reasonText() {
     const list = this.denies.length ? this.denies : this.asks;

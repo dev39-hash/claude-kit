@@ -19,9 +19,11 @@ paths:
 - GoogleTest (and GoogleMock when needed) through CMake `FetchContent` with a pinned tag,
   discovered with `gtest_discover_tests()`, run through CTest. One test executable per
   logical area, registered in `tests/CMakeLists.txt`.
-- Layout: `tests/unit/` (pure logic, no files), `tests/synthetic/` (inputs generated at test
-  time: drawn images, built frames; runs everywhere), `tests/regression/` (fixtures plus
-  goldens, skips when a fixture is absent), optional `tests/bench/` (timing, never asserted).
+- Layers (the directories are the project's; `project/rules.md` Testing policy names them):
+  unit (pure logic, no files), synthetic (inputs generated at test time: drawn images, built
+  frames; runs everywhere; may live inside the unit directory), regression (fixtures plus
+  goldens, skips when a fixture is absent), optional bench (timing, never asserted). A
+  typical split is `tests/unit/`, `tests/synthetic/`, `tests/regression/`, `tests/bench/`.
 - Fixtures are located through a CMake cache variable compiled in as a definition
   (`packConfig.cpp-cmake-gtest.testDataVar`, default `TEST_DATA_DIR`); never an absolute path.
   `GTEST_SKIP()` with a clear message when the directory or file is missing.
@@ -31,8 +33,9 @@ paths:
 - Arrange / Act / Assert; one behaviour per test; name `TEST(Subject, DoesXWhenY)`.
 - Through the public API only; expected values from the spec, the reference or a hand
   computation, never from the code under test.
-- Tolerances for floating-point results (`EXPECT_NEAR`, project tolerances in
-  `project/rules.md`); never `EXPECT_DOUBLE_EQ` on a computed geometry or score.
+- Tolerances for floating-point results (`EXPECT_NEAR`; the project's tolerance table lives
+  in `project/rules.md`, Testing policy, "Tolerances, goldens, baselines"); never
+  `EXPECT_DOUBLE_EQ` on a computed geometry or score.
 - Parameterised tests for rotations, sizes, modes (`TEST_P` + `INSTANTIATE_TEST_SUITE_P`).
 - No sleeps, network, hardware or writes outside a temp directory in unit tests; crash
   tests in a child process (`EXPECT_DEATH` or a subprocess).

@@ -14,14 +14,21 @@ node .claude/tools/cpp-cmake-gtest/build.js all --config Release
 node .claude/tools/cpp-cmake-gtest/build.js all --slot <task-tag>    # parallel agents: a build slot
 node .claude/tools/cpp-cmake-gtest/build.js test --filter <Suite>    # one suite
 node .claude/tools/cpp-cmake-gtest/build.js all -DFOO=ON             # any -D forces a reconfigure
-node .claude/tools/cpp-cmake-gtest/wt-slot.js status|release <tag>|touch <tag>|reclaim
+node .claude/tools/cpp-cmake-gtest/build.js all --fresh              # empty the build dir first (moved tree, foreign cache)
+node .claude/tools/cpp-cmake-gtest/build.js all --slot <tag> --empty-slot   # a true first build in a slot
+node .claude/tools/cpp-cmake-gtest/wt-slot.js status|release <tag>|reset <tag>|touch <tag>|reclaim
 ```
 
 `build.js` finds `cmake` / `ctest` through `build.toolchain.cmakeExe`, PATH, then the Visual
 Studio installs; `packConfig.cpp-cmake-gtest` supplies the generator, architecture, standing
-configure arguments (`-DOpenCV_DIR=...` from an environment variable, never a literal path in
-`CMakeLists.txt`) and the warnings-as-errors option name. Raw `cmake` / `ctest` lines are fine
-too; copy them from `project/build-env.md`, not from memory.
+configure arguments and the warnings-as-errors option name. Configure arguments may say
+`$env{NAME}` (taken from the environment at run time) and `${sourceDir}` (the project root);
+use them for anything that names the tree or a per-machine directory, so a moved tree needs no
+config edit; never a literal path in `CMakeLists.txt`. Every step writes a log under
+`<paths.scratch>/build-logs/` and prints duration, warning and error counts (and the ctest
+totals); `build` / `all` reconfigure by themselves when a CMake input is newer than the cache or
+a source file was added or removed; a cache of another tree stops the run until `--fresh`.
+Raw `cmake` / `ctest` lines are fine too; copy them from `project/build-env.md`, not from memory.
 
 ## Rules
 
@@ -40,8 +47,14 @@ too; copy them from `project/build-env.md`, not from memory.
   `build.leadBuildDir`; `build-*` is in `build.buildDirPatterns` and ignored by git.
 - **Tests run alone**: nothing from `processes.busyBeforeTests` running; shape-check the total
   (`ctest -N`).
-- **Dependencies** come from cache variables fed by the environment (`-D<Pkg>_DIR=$VAR`);
-  a new dependency, option or target needs an ADR.
+- **Dependencies** come from cache variables (`-D<Pkg>_DIR=$env{VAR}` in `configureArgs`, or a
+  literal toolchain path outside the tree recorded in `build-env.md`); a new dependency,
+  option or target needs an ADR.
+- **Visual Studio generator, many targets in one directory**: a first `--parallel` build can
+  race on the shared `generate.stamp` (`Cannot restore timestamp`, `MSB8066`); set
+  `packConfig.cpp-cmake-gtest.suppressRegeneration: true` and let `build.js` decide when to
+  reconfigure. After that a raw `cmake --build` never re-runs CMake: configure by hand after
+  any CMake input change.
 - **Sanitizers**: the project's option (`packConfig...asanOption`) builds the regression
   suite under ASan/UBSan at least once per release.
 

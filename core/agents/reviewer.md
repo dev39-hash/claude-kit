@@ -11,6 +11,14 @@ ad-hoc review, the files or diff range to judge). You have no Write or Edit tool
 your deliverable is the **Review verdict** block below, returned complete in your final reply;
 the leader pastes it into the task file unchanged.
 
+You keep `Bash` for reading only: `git diff`, `git log`, `git grep`, `git status`, `ctest -N`,
+`grep` on logs and caches, `reg query`, a tool's `--help` or `status`. Read-only is a contract,
+not a sandbox: no hook knows which agent runs a command, so nothing but this paragraph stops a
+write. Never run a command that changes a file, git state, a build tree, a slot, a process or
+the environment (no redirection into the project, no `git add|commit|checkout|stash`, no build
+or test run, no delete, no `wt-slot.js acquire`); when the review needs such evidence, name the
+command in the verdict and let the leader run it.
+
 ## Read order
 
 1. The task file's **Plan**: the contract the diff must satisfy (goal, deliverables, touch

@@ -3,31 +3,53 @@
 // (pack cpp-cmake-gtest). Adapted from a project-written build.js (2026).
 //
 //   node .claude/tools/cpp-cmake-gtest/build.js <configure|build|test|all>
-//        [--config Debug|Release] [--dir <dir>] [--slot <tag>] [--release-slot]
+//        [--config Debug|Release] [--dir <dir>] [--slot <tag>] [--empty-slot] [--release-slot]
+//        [--fresh] [--no-reconfigure] [--log-dir <dir>] [--no-log]
 //        [-D<VAR>=<value> ...] [--target <t>] [--filter <regex>]
 //
 //   configure   cmake -S <project> -B <dir> [-G <generator>] <packConfig.configureArgs> <warnings option> -D...
 //   build       cmake --build <dir> --config <cfg> --parallel [--target <t>]
 //   test        ctest --test-dir <dir> -C <cfg> --output-on-failure [-R <filter>]
-//   all         configure (when <dir>/CMakeCache.txt is missing or any -D was given) + build + test
+//   all         configure when needed (see below) + build + test
 //
-//   --config        Debug (default from packConfig.defaultConfig) or Release
-//   --dir           build directory (relative to the project unless absolute); default build.leadBuildDir
-//   --slot          take a build slot (wt-slot.js) for <tag> and build there; printed as "slot <tag> -> <dir>"
-//   --release-slot  release the slot after the run (otherwise: node .../wt-slot.js release <tag>)
+//   --config         Debug (default from packConfig.defaultConfig) or Release
+//   --dir            build directory (relative to the project unless absolute); default build.leadBuildDir
+//   --slot           take a build slot (wt-slot.js) for <tag> and build there; printed as "slot <tag> -> <dir>"
+//   --empty-slot     with --slot: take a slot that holds no CMake cache (a true first build)
+//   --release-slot   release the slot after the run (otherwise: node .../wt-slot.js release <tag>)
+//   --fresh          empty the build directory first (only a directory inside the project that
+//                    matches build.buildDirPatterns or the slot dir; a slot keeps its lock), then configure
+//   --no-reconfigure never reconfigure on its own (build / all)
+//   --log-dir        where step logs go; default <paths.scratch>/build-logs (outside the build
+//                    dir, which may be emptied); --no-log writes none
 //
-// kit.config.json keys used: build.leadBuildDir, build.slots, build.warningsAsErrors,
-// build.toolchain.cmakeExe / ctestExe / vsRoot, packConfig.cpp-cmake-gtest.{generator,
-// configureArgs, defaultConfig, warningsAsErrorsOption}.
+// When `build` or `all` reconfigures by itself: no CMakeCache.txt; any -D given; --fresh; a CMake
+// input (CMakeLists.txt, *.cmake, *.in, CMakePresets.json) newer than the cache; the set of
+// source files differs from the one recorded at the last configure (<dir>/.kit-build-inputs.json).
+// That keeps a tree configured with CMAKE_SUPPRESS_REGENERATION (packConfig.suppressRegeneration)
+// honest after a new or removed source file.
+// A cache that belongs to another source or build directory (a moved tree) stops every step:
+// rerun with --fresh.
+//
+// configureArgs may use $env{NAME} (an environment variable; an unset one is an error) and
+// ${sourceDir} (the project root with forward slashes), so a tree move needs no config edit.
+//
+// kit.config.json keys used: build.leadBuildDir, build.slots, build.buildDirPatterns,
+// build.warningsAsErrors, build.toolchain.cmakeExe / ctestExe / vsRoot, paths.scratch,
+// paths.readOnly, packConfig.cpp-cmake-gtest.{generator, architecture, configureArgs,
+// defaultConfig, warningsAsErrorsOption, suppressRegeneration}.
 // cmake/ctest: build.toolchain.cmakeExe, then PATH, then Visual Studio installs (vswhere, the usual
-// Program Files layout). Tool output is streamed; each step ends with
-//   build.js: <step> OK|FAILED (<dir>, <config>)
-// Exit code: 0, or the exit code of the first failing step; 2 usage / missing tool; 1 no free slot.
+// Program Files layout). Children run with MSBUILDDISABLENODEREUSE=1 so no idle MSBuild node
+// outlives the run. Tool output is streamed and logged; each step ends with
+//   build.js: <step> OK|FAILED (<dir>, <config>) <seconds> s, <n> warning(s), <n> error(s)[, tests ...]; log <file>
+// Exit code: 0, or the exit code of the first failing step; 2 usage / missing tool / foreign cache;
+// 1 no free slot.
+
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const { loadConfig, packConfig } = require('./kit-env');
 
 const { cfg, root: PROJECT } = loadConfig();
@@ -39,12 +61,13 @@ const VSWHERE = path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files
 function usage(msg) {
   if (msg) process.stderr.write('build.js: ' + msg + '\n');
   process.stderr.write('usage: node .claude/tools/cpp-cmake-gtest/build.js <configure|build|test|all> ' +
-    '[--config Debug|Release] [--dir <dir>] [--slot <tag>] [--release-slot] [-D<VAR>=<v> ...] [--target <t>] [--filter <re>]\n');
+    '[--config Debug|Release] [--dir <dir>] [--slot <tag>] [--empty-slot] [--release-slot] [--fresh] [--no-reconfigure] ' +
+    '[--log-dir <dir>] [--no-log] [-D<VAR>=<v> ...] [--target <t>] [--filter <re>]\n');
   process.exit(2);
 }
 
 function parseArgs(argv) {
-  const o = { step: null, config: PC.defaultConfig || 'Debug', dir: null, slot: null, releaseSlot: false, defs: [], target: null, filter: null };
+  const o = { step: null, config: PC.defaultConfig || 'Debug', dir: null, slot: null, releaseSlot: false, emptySlot: false, fresh: false, noReconfigure: false, logDir: null, noLog: false, defs: [], target: null, filter: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const val = () => { if (i + 1 >= argv.length) usage('missing value for ' + a); return argv[++i]; };
@@ -55,6 +78,11 @@ function parseArgs(argv) {
     else if (a === '--slot') o.slot = val();
     else if (a.startsWith('--slot=')) o.slot = a.slice(7);
     else if (a === '--release-slot') o.releaseSlot = true;
+    else if (a === '--empty-slot') o.emptySlot = true;
+    else if (a === '--fresh') o.fresh = true;
+    else if (a === '--no-reconfigure') o.noReconfigure = true;
+    else if (a === '--log-dir') o.logDir = val();
+    else if (a === '--no-log') o.noLog = true;
     else if (a === '--target') o.target = val();
     else if (a === '--filter' || a === '-R') o.filter = val();
     else if (a.startsWith('-D')) o.defs.push(a);
@@ -64,6 +92,7 @@ function parseArgs(argv) {
   }
   if (!['configure', 'build', 'test', 'all'].includes(o.step)) usage(o.step ? 'unknown step ' + o.step : 'missing step');
   if (o.dir && o.slot) usage('--dir and --slot are mutually exclusive');
+  if (o.emptySlot && !o.slot) usage('--empty-slot needs --slot');
   return o;
 }
 
@@ -118,21 +147,186 @@ function findTool(tool) {
 }
 
 // ---- running steps ---------------------------------------------------------------------------
-function runTool(exe, args) {
-  process.stdout.write('> ' + exe + ' ' + args.map((a) => (/\s/.test(a) ? '"' + a + '"' : a)).join(' ') + '\n');
-  const r = spawnSync(exe, args, { stdio: 'inherit', cwd: PROJECT });
-  if (r.error) { process.stderr.write('build.js: cannot run ' + exe + ': ' + r.error.message + '\n'); return 2; }
-  return r.status === null ? 1 : r.status;
+const WARN_RE = /(?:^|[\s:])warning\s+[A-Z]+\d+\s*:|:\s*warning\s*:|^CMake Warning/i;
+const ERR_RE = /(?:^|[\s:])(?:fatal\s+)?error\s+[A-Z]+\d+\s*:|:\s*(?:fatal\s+)?error\s*:|^CMake Error/i;
+
+function stamp() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
 }
 
-function main() {
+// Runs a tool, streams its output, tees it into a log file, counts distinct warning and error
+// lines. Resolves { code, seconds, warnings, errors, text }.
+function runTool(exe, args, logFile) {
+  const line = '> ' + exe + ' ' + args.map((a) => (/\s/.test(a) ? '"' + a + '"' : a)).join(' ') + '\n';
+  process.stdout.write(line);
+  let log = null;
+  if (logFile) {
+    try { fs.mkdirSync(path.dirname(logFile), { recursive: true }); log = fs.openSync(logFile, 'w'); fs.writeSync(log, line); } catch (_) { log = null; }
+  }
+  const env = Object.assign({}, process.env, { MSBUILDDISABLENODEREUSE: '1' });
+  const t0 = Date.now();
+  return new Promise((resolve) => {
+    let child;
+    try { child = spawn(exe, args, { cwd: PROJECT, env }); } catch (err) {
+      process.stderr.write('build.js: cannot run ' + exe + ': ' + err.message + '\n');
+      resolve({ code: 2, seconds: 0, warnings: 0, errors: 0, text: '' });
+      return;
+    }
+    const warn = new Set(), errs = new Set();
+    let text = '', pending = '';
+    const scan = (s) => {
+      pending += s;
+      const parts = pending.split(/\r?\n/);
+      pending = parts.pop();
+      for (const l of parts) {
+        const key = l.replace(/\s*\[[^\]]*\.(?:vcxproj|csproj|proj)\]\s*$/i, '').trim();
+        if (ERR_RE.test(key)) errs.add(key); else if (WARN_RE.test(key)) warn.add(key);
+      }
+    };
+    const onData = (stream) => (buf) => {
+      const s = buf.toString();
+      stream.write(s);
+      if (log !== null) { try { fs.writeSync(log, s); } catch (_) { /* ignore */ } }
+      if (text.length < 4 * 1024 * 1024) text += s;
+      scan(s);
+    };
+    child.stdout.on('data', onData(process.stdout));
+    child.stderr.on('data', onData(process.stderr));
+    child.on('error', (err) => { process.stderr.write('build.js: cannot run ' + exe + ': ' + err.message + '\n'); });
+    child.on('close', (code) => {
+      scan('\n');
+      if (log !== null) { try { fs.closeSync(log); } catch (_) { /* ignore */ } }
+      resolve({ code: code === null ? 1 : code, seconds: (Date.now() - t0) / 1000, warnings: warn.size, errors: errs.size, text });
+    });
+  });
+}
+
+// ---- cache and inputs ------------------------------------------------------------------------
+function normDir(p) { const r = path.resolve(p).replace(/\\/g, '/').replace(/\/+$/, ''); return process.platform === 'win32' ? r.toLowerCase() : r; }
+
+function readCache(dir) {
+  let text;
+  try { text = fs.readFileSync(path.join(dir, 'CMakeCache.txt'), 'utf8'); } catch (_) { return null; }
+  const get = (k) => { const m = text.match(new RegExp('^' + k + ':[A-Z]+=(.*)$', 'm')); return m ? m[1].trim() : ''; };
+  return { home: get('CMAKE_HOME_DIRECTORY'), cacheDir: get('CMAKE_CACHEFILE_DIR') };
+}
+
+// A cache written for another tree (the project moved, or a copied build dir).
+function foreignCache(dir) {
+  const c = readCache(dir);
+  if (!c) return null;
+  if (c.home && normDir(c.home) !== normDir(PROJECT)) return 'its source directory is ' + c.home;
+  if (c.cacheDir && normDir(c.cacheDir) !== normDir(dir)) return 'it was written for ' + c.cacheDir;
+  return null;
+}
+
+function patternRe(p) {
+  const s = String(p).replace(/\\/g, '/').replace(/\/+$/, '');
+  return new RegExp('^' + s.replace(/[.+^${}()|[\]]/g, '\\$&').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]') + '(/|$)', 'i');
+}
+const SKIP_RES = ['.git', '.claude', 'node_modules'].concat(cfg.build.buildDirPatterns || []).concat(cfg.paths.readOnly || []).map(patternRe);
+const SOURCE_EXT = /\.(c|cc|cpp|cxx|h|hh|hpp|hxx|inl|ipp|ixx)$/i;
+const CMAKE_INPUT = /(^CMakeLists\.txt$|\.cmake$|\.in$|^CMake(User)?Presets\.json$)/i;
+
+function scanInputs(buildDir) {
+  const bd = normDir(buildDir);
+  const sources = [];
+  let newest = 0, newestFile = '';
+  const walk = (abs, rel) => {
+    let ents;
+    try { ents = fs.readdirSync(abs, { withFileTypes: true }); } catch (_) { return; }
+    for (const e of ents) {
+      const r = rel ? rel + '/' + e.name : e.name;
+      const a = path.join(abs, e.name);
+      if (e.isDirectory()) {
+        if (SKIP_RES.some((re) => re.test(r)) || normDir(a) === bd) continue;
+        walk(a, r);
+      } else if (e.isFile()) {
+        if (SOURCE_EXT.test(e.name)) sources.push(r);
+        if (CMAKE_INPUT.test(e.name)) {
+          let m = 0;
+          try { m = fs.statSync(a).mtimeMs; } catch (_) { /* ignore */ }
+          if (m > newest) { newest = m; newestFile = r; }
+        }
+      }
+    }
+  };
+  walk(PROJECT, '');
+  sources.sort();
+  return { sources, newest, newestFile };
+}
+
+const INPUTS_FILE = '.kit-build-inputs.json';
+
+// Why the tree needs a configure before building, or null.
+function staleReason(dir) {
+  let cacheTime;
+  try { cacheTime = fs.statSync(path.join(dir, 'CMakeCache.txt')).mtimeMs; } catch (_) { return 'no CMakeCache.txt'; }
+  const now = scanInputs(dir);
+  if (now.newest > cacheTime) return now.newestFile + ' is newer than the cache';
+  let rec = null;
+  try { rec = JSON.parse(fs.readFileSync(path.join(dir, INPUTS_FILE), 'utf8')); } catch (_) { return 'no source list recorded at the last configure'; }
+  const before = new Set(rec.sources || []);
+  const added = now.sources.filter((s) => !before.has(s));
+  const after = new Set(now.sources);
+  const removed = (rec.sources || []).filter((s) => !after.has(s));
+  if (added.length || removed.length) {
+    return 'source files changed since the last configure (' + (added.length ? '+' + added.slice(0, 3).join(', +') : '') +
+      (added.length && removed.length ? '; ' : '') + (removed.length ? '-' + removed.slice(0, 3).join(', -') : '') + ')';
+  }
+  return null;
+}
+
+function recordInputs(dir) {
+  try { fs.writeFileSync(path.join(dir, INPUTS_FILE), JSON.stringify({ time: new Date().toISOString(), sources: scanInputs(dir).sources })); } catch (_) { /* ignore */ }
+}
+
+// --fresh empties only a build directory inside the project: one that matches
+// build.buildDirPatterns or lies under the slot dir. The slot lock survives.
+function wipeBuildDir(dir) {
+  const rel = path.relative(PROJECT, dir).replace(/\\/g, '/');
+  const slotRoot = path.resolve(PROJECT, (cfg.build.slots && cfg.build.slots.dir) || 'build-wt');
+  const inSlots = !path.relative(slotRoot, dir).startsWith('..') && normDir(dir) !== normDir(slotRoot);
+  const isBuild = (cfg.build.buildDirPatterns || []).map(patternRe).some((re) => re.test(rel));
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel) || !(inSlots || isBuild)) {
+    usage('--fresh refuses to empty ' + dir + ': not a build directory inside the project (build.buildDirPatterns, build.slots.dir)');
+  }
+  let n = 0;
+  let ents = [];
+  try { ents = fs.readdirSync(dir); } catch (_) { return 0; }
+  for (const e of ents) {
+    if (e === '.lock') continue;
+    fs.rmSync(path.join(dir, e), { recursive: true, force: true });
+    n++;
+  }
+  return n;
+}
+
+// $env{NAME} and ${sourceDir} in configureArgs.
+function expandArg(a) {
+  return String(a)
+    .replace(/\$\{sourceDir\}/g, PROJECT.replace(/\\/g, '/'))
+    .replace(/\$env\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (m, n) => {
+      const v = process.env[n];
+      if (v === undefined || v === '') usage('configureArgs uses $env{' + n + '} but the environment variable ' + n + ' is not set');
+      return v;
+    });
+}
+
+async function main() {
   const o = parseArgs(process.argv.slice(2));
   let slots = null;
   let dir;
   if (o.slot) {
     slots = require('./wt-slot.js');
-    dir = slots.acquire(o.slot);
-    if (!dir) { process.stderr.write('build.js: no free build slot (run: node .claude/tools/cpp-cmake-gtest/wt-slot.js status)\n'); process.exit(1); }
+    dir = slots.acquire(o.slot, { empty: o.emptySlot });
+    if (!dir) {
+      process.stderr.write('build.js: no free ' + (o.emptySlot ? 'empty ' : '') + 'build slot (run: node .claude/tools/cpp-cmake-gtest/wt-slot.js status' +
+        (o.emptySlot ? '; or take any slot with --fresh' : '') + ')\n');
+      process.exit(1);
+    }
     process.stdout.write('build.js: slot ' + o.slot + ' -> ' + dir + '\n');
   } else {
     dir = path.resolve(PROJECT, o.dir || cfg.build.leadBuildDir || 'build');
@@ -145,35 +339,72 @@ function main() {
   if (o.step !== 'test' && !cmake) usage('cmake not found (build.toolchain.cmakeExe, PATH, Visual Studio)');
   if ((o.step === 'test' || o.step === 'all') && !ctest) usage('ctest not found (build.toolchain.ctestExe, PATH, Visual Studio)');
 
+  if (o.fresh) {
+    const n = wipeBuildDir(dir);
+    process.stdout.write('build.js: --fresh emptied ' + shown + ' (' + n + ' entries)\n');
+  } else {
+    const foreign = foreignCache(dir);
+    if (foreign) {
+      process.stderr.write('build.js: the CMake cache in ' + shown + ' belongs to another tree (' + foreign + '); MSBuild state ' +
+        'would also point there. Rerun with --fresh to empty it and configure from scratch.\n');
+      process.exit(2);
+    }
+  }
+
   const confArgs = ['-S', PROJECT, '-B', dir];
   if (PC.generator) confArgs.push('-G', PC.generator);
   if (PC.architecture) confArgs.push('-A', PC.architecture);
-  for (const a of PC.configureArgs || []) confArgs.push(a);
+  for (const a of PC.configureArgs || []) confArgs.push(expandArg(a));
+  if (PC.suppressRegeneration && !confArgs.some((a) => /^-DCMAKE_SUPPRESS_REGENERATION[:=]/.test(a))) confArgs.push('-DCMAKE_SUPPRESS_REGENERATION=ON');
   if (cfg.build.warningsAsErrors && PC.warningsAsErrorsOption) confArgs.push('-D' + PC.warningsAsErrorsOption + '=ON');
   for (const d of o.defs) confArgs.push(d);
 
-  const summary = (step, code) => {
-    process.stdout.write('build.js: ' + step + ' ' + (code === 0 ? 'OK' : 'FAILED') + ' (' + shown + ', ' + o.config + ')\n');
-    return code;
+  const logDir = o.noLog ? null : path.resolve(PROJECT, o.logDir || path.join(cfg.paths.scratch || '.claude/scratch', 'build-logs'));
+  const runId = stamp() + '_' + label.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '') + '_' + o.config;
+  const logFor = (step) => (logDir ? path.join(logDir, runId + '_' + step + '.log') : null);
+
+  const summary = (step, r, extra) => {
+    const lf = logFor(step);
+    process.stdout.write('build.js: ' + step + ' ' + (r.code === 0 ? 'OK' : 'FAILED') + ' (' + shown + ', ' + o.config + ') ' +
+      r.seconds.toFixed(1) + ' s, ' + r.warnings + ' warning(s), ' + r.errors + ' error(s)' + (extra ? ', ' + extra : '') +
+      (lf ? '; log ' + path.relative(PROJECT, lf).replace(/\\/g, '/') : '') + '\n');
+    return r.code;
   };
-  const configure = () => summary('configure', runTool(cmake, confArgs));
-  const build = () => summary('build', runTool(cmake, ['--build', dir, '--config', o.config, '--parallel'].concat(o.target ? ['--target', o.target] : [])));
-  const test = () => summary('test', runTool(ctest, ['--test-dir', dir, '-C', o.config, '--output-on-failure'].concat(o.filter ? ['-R', o.filter] : [])));
+  const configure = async () => {
+    const r = await runTool(cmake, confArgs, logFor('configure'));
+    if (r.code === 0) recordInputs(dir);
+    return summary('configure', r);
+  };
+  const build = async () => summary('build', await runTool(cmake, ['--build', dir, '--config', o.config, '--parallel'].concat(o.target ? ['--target', o.target] : []), logFor('build')));
+  const test = async () => {
+    const r = await runTool(ctest, ['--test-dir', dir, '-C', o.config, '--output-on-failure'].concat(o.filter ? ['-R', o.filter] : []), logFor('test'));
+    const m = r.text.match(/(\d+)% tests passed, (\d+) tests? failed out of (\d+)/);
+    const skipped = (r.text.match(/\(Skipped\)/g) || []).length;
+    const extra = m ? 'tests ' + (Number(m[3]) - Number(m[2])) + ' / ' + m[3] + ' passed, ' + m[2] + ' failed, ' + skipped + ' skipped' : 'no ctest summary line';
+    return summary('test', r, extra);
+  };
+  const needConfigure = () => {
+    if (o.fresh || o.defs.length) return o.fresh ? '--fresh' : 'a -D was given';
+    if (o.noReconfigure) return fs.existsSync(path.join(dir, 'CMakeCache.txt')) ? null : 'no CMakeCache.txt';
+    return staleReason(dir);
+  };
 
   let code = 0;
-  if (o.step === 'configure') code = configure();
-  else if (o.step === 'build') code = build();
-  else if (o.step === 'test') code = test();
-  else {
-    const cache = fs.existsSync(path.join(dir, 'CMakeCache.txt'));
-    if (!cache || o.defs.length) code = configure();
-    else process.stdout.write('build.js: configure skipped (CMakeCache.txt exists in ' + shown + '; pass -D... to reconfigure)\n');
-    if (code === 0) code = build();
-    if (code === 0) code = test();
-    process.stdout.write('build.js: all ' + (code === 0 ? 'OK' : 'FAILED') + ' (' + shown + ', ' + o.config + ')\n');
+  if (o.step === 'configure') code = await configure();
+  else if (o.step === 'test') {
+    const why = staleReason(dir);
+    if (why) process.stdout.write('build.js: WARNING the tree may be stale (' + why + '); run build or all first\n');
+    code = await test();
+  } else {
+    const why = needConfigure();
+    if (why) { process.stdout.write('build.js: configure (' + why + ')\n'); code = await configure(); }
+    else if (o.step === 'all') process.stdout.write('build.js: configure skipped (cache current in ' + shown + ')\n');
+    if (code === 0) code = await build();
+    if (code === 0 && o.step === 'all') code = await test();
+    if (o.step === 'all') process.stdout.write('build.js: all ' + (code === 0 ? 'OK' : 'FAILED') + ' (' + shown + ', ' + o.config + ')\n');
   }
   if (slots && o.releaseSlot) { slots.release(o.slot); process.stdout.write('build.js: slot ' + o.slot + ' released\n'); }
   process.exit(code);
 }
 
-main();
+main().catch((err) => { process.stderr.write('build.js: ' + (err && err.stack ? err.stack : err) + '\n'); process.exit(2); });

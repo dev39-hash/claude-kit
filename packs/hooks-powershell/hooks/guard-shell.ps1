@@ -33,7 +33,11 @@ if (-not $cmd) { exit 0 }
 $script:Denies = @()
 $script:Asks = @()
 function Deny([string]$r) { $script:Denies += $r }
-function Ask([string]$r) { $script:Asks += $r }
+# $c is the ask category (push, remote, destructiveGit, killByName, envWrite, localOnlyDelete);
+# in a permission mode listed in hooks.autoMode.modes an ask of a category in
+# hooks.autoMode.askToDeny becomes a deny (the ask would not reach the human).
+$script:AskCats = @()
+function Ask([string]$r, [string]$c = '') { $script:Asks += $r; $script:AskCats += $c }
 function Esc([string]$s) { return [regex]::Escape($s) }
 
 try {
@@ -56,14 +60,14 @@ try {
         } elseif ($force -and $withLease -and $forcePolicy -eq 'deny') {
             Deny 'force push is disabled for this project (git.forcePush = deny).'
         } elseif ($force) {
-            Ask 'force push with lease: confirm with the human first.'
+            Ask 'force push with lease: confirm with the human first.' 'push'
         } elseif ($pushPolicy -ne 'allow') {
-            Ask 'git push: only when the human asked for it in this conversation.'
+            Ask 'git push: only when the human asked for it in this conversation.' 'push'
         }
     }
     if ($cmd -match ($gitHead + 'remote\s+(add|set-url|remove|rm|rename)(\s|$)')) {
         if ($pushPolicy -eq 'deny') { Deny 'changing a remote is disabled for this project (git.push = deny).' }
-        else { Ask 'git remote change: confirm with the human first.' }
+        else { Ask 'git remote change: confirm with the human first.' 'remote' }
     }
     if (($cmd -match ($gitHead + 'config\s+(--global|--system)(\s|$)')) -and -not ($cmd -match '(?i)\s(--get|--get-all|--list|-l)(\s|$)')) {
         Deny 'global or system git config writes are not allowed; set repo-local config instead.'
@@ -87,7 +91,7 @@ try {
     $dryRun = $cmd -match '\s(-n|--dry-run)(\s|$)'
     foreach ($d in $destructive) {
         if ($d[0].StartsWith('clean') -and $dryRun) { continue }
-        if ($cmd -match ($gitHead + $d[0])) { Ask $d[1] }
+        if ($cmd -match ($gitHead + $d[0])) { Ask $d[1] 'destructiveGit' }
     }
     if (($cmd -match ($gitHead + 'clean\s+(.*\s)?-[A-Za-z]*[xX][A-Za-z]*(\s|$)')) -and -not ($cmd -match '\s(-n|--dry-run)(\s|$)')) {
         Deny 'git clean -x / -X would delete ignored files such as .claude/; use -n first and never -x.'
@@ -146,7 +150,7 @@ try {
         if (($cmd -match $asCommand) -or (($cmd -match $launchVerb) -and ($cmd -match $named))) { Deny ('never launch ' + $n + ' (processes.neverLaunch).') }
     }
     if (($cmd -match $killVerb) -and -not ($cmd -match '(?i)(\s(/PID|-Id)\s+\d+)|(\bkill\s+(-\d+\s+)?\d+)') -and $script:Denies.Count -eq 0) {
-        Ask 'killing a process by name: kill only processes this session started, by PID.'
+        Ask 'killing a process by name: kill only processes this session started, by PID.' 'killByName'
     }
 
     # ---- persistent environment variables (K19) ---------------------------------------------
@@ -175,11 +179,11 @@ try {
         if ($protected) {
             Deny ($envHow + ' writes the protected environment variable ' + $envName + ' (environment.protectedVars "' + $protected + '"): the human owns the build environment. Set it for this process only ($env:NAME) or tell the human.')
         } elseif (-not $envName) {
-            Ask ($envHow + ' writes a user- or machine-scope environment variable whose name the guard cannot read; it outlives the session. Confirm with the human.')
+            Ask ($envHow + ' writes a user- or machine-scope environment variable whose name the guard cannot read; it outlives the session. Confirm with the human.') 'envWrite'
         } elseif ($mode -eq 'deny') {
             Deny ($envHow + ' writes the environment variable ' + $envName + ' persistently (environment.persistentWrites "deny"). Set it for this process only ($env:NAME).')
         } elseif ($mode -ne 'allow') {
-            Ask ($envHow + ' writes the environment variable ' + $envName + ' persistently: it outlives this session and changes the build environment of every tool on the machine. Set it for this process only ($env:NAME) or confirm with the human.')
+            Ask ($envHow + ' writes the environment variable ' + $envName + ' persistently: it outlives this session and changes the build environment of every tool on the machine. Set it for this process only ($env:NAME) or confirm with the human.') 'envWrite'
         }
     }
 
@@ -214,8 +218,22 @@ try {
             if (PathHit $p) { Deny ('delete inside a read-only path (' + $p + ', paths.readOnly).') }
         }
         foreach ($p in @(Get-Prop $cfg @('paths', 'localOnly') @())) {
-            if (PathHit $p) { Ask ('delete inside a local-only path (' + $p + ', paths.localOnly): confirm with the human.') }
+            if (PathHit $p) { Ask ('delete inside a local-only path (' + $p + ', paths.localOnly): confirm with the human.') 'localOnlyDelete' }
         }
+    }
+
+    # ---- unattended permission modes (auto, bypassPermissions): listed asks become denies ------
+    $permMode = [string](Get-Prop $hookInput @('permission_mode') '')
+    $amModes = @(Get-Prop $cfg @('hooks', 'autoMode', 'modes') @('auto', 'bypassPermissions'))
+    $amCats = @(Get-Prop $cfg @('hooks', 'autoMode', 'askToDeny') @('push', 'envWrite', 'askBeforeEdit', 'localOnlyDelete', 'destructiveGit'))
+    if ($permMode -and ($amModes -contains $permMode)) {
+        $keep = @()
+        for ($i = 0; $i -lt $script:Asks.Count; $i++) {
+            if ($amCats -contains $script:AskCats[$i]) {
+                Deny ($script:Asks[$i] + ' Permission mode is "' + $permMode + '": an ask would not reach the human, so it is denied (hooks.autoMode.askToDeny "' + $script:AskCats[$i] + '"). Ask the human in chat; they run the command themselves or approve it outside ' + $permMode + ' mode.')
+            } else { $keep += $script:Asks[$i] }
+        }
+        $script:Asks = $keep
     }
 
     if ($script:Denies.Count -gt 0) { Emit-Decision 'guard-shell' 'deny' $script:Denies }

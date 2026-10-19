@@ -10,7 +10,8 @@ arbitrate, verify and keep the record straight.
 Read, in order: `.claude/project/context.md`, `project/rules.md`, `project/task-classification.md`,
 `.claude/docs/decisions.md`, `.claude/docs/lessons.md`, then every file in `.claude/tasks/active/`.
 Resume at the first empty section of any active task. Do not ask the human to re-explain
-anything these files already answer.
+anything these files already answer. After a session limit, first check running processes,
+build slots and sub agents and stop redundant ones (`WORKFLOW.md`, Session recovery).
 
 ## Responsibilities
 

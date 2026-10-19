@@ -44,14 +44,42 @@ CTest, on MSVC, GCC or Clang. Derived from the `.claude` folders of two earlier 
     "asanOption": "",
     "testDataVar": "TEST_DATA_DIR",
     "goldenDir": "tests/golden",
-    "updateGoldenFlag": "--update-golden"
+    "updateGoldenFlag": "--update-golden",
+    "suppressRegeneration": false
   }
 }
 ```
 
-`configureArgs` holds the standing `-D` options (dependency dirs from environment variables,
-feature switches); `warningsAsErrorsOption` is the project's CMake option name that
-`build.js` sets to ON when `build.warningsAsErrors` is true.
+`configureArgs` holds the standing `-D` options (dependency dirs, feature switches). It may
+use `$env{NAME}` (an environment variable; `build.js` stops when it is unset) and
+`${sourceDir}` (the project root with forward slashes), so moving the tree needs no config
+edit: `"-DTEST_DATA_DIR=${sourceDir}/fixtures"`, `"-DOpenCV_DIR=$env{OpenCV_DIR}"`. A
+toolchain path outside the tree may stay literal. `warningsAsErrorsOption` is the project's
+CMake option name that `build.js` sets to ON when `build.warningsAsErrors` is true.
+
+`suppressRegeneration: true` adds `-DCMAKE_SUPPRESS_REGENERATION=ON`. Use it with the Visual
+Studio generator when many targets share one directory: on a first `--parallel` build every
+project runs its own CMake re-check against the one shared `generate.stamp` and they race
+(`Cannot restore timestamp ... Access is denied`, `MSB8066`; seen 2026-10-18 with 43 test
+executables in `tests/unit`). With the option the build never re-runs CMake by itself;
+`build.js build|all` makes up for it by reconfiguring when a CMake input is newer than the
+cache or the set of source files changed (see below). A raw `cmake --build` does not.
+
+## build.js behaviour worth knowing
+
+- Logs every step to `<paths.scratch>/build-logs/<time>_<dir>_<config>_<step>.log` (outside the
+  build dir, which may be emptied) and ends each step with duration, distinct warning and error
+  lines, and for tests the ctest totals and skip count.
+- `build` and `all` reconfigure when: no cache, a `-D`, `--fresh`, a CMake input newer than the
+  cache, or a source file added or removed since the last configure (recorded in
+  `<dir>/.kit-build-inputs.json`). `--no-reconfigure` turns that off.
+- A cache written for another tree (moved project, copied build dir) stops every step with
+  exit 2; `--fresh` empties the directory (only a build dir inside the project or a slot; the
+  slot lock stays) and configures from scratch. Deleting only `CMakeCache.txt` is not enough
+  after a move: MSBuild `*.lastbuildstate` keeps the old path (MSB8028).
+- Children run with `MSBUILDDISABLENODEREUSE=1`: no idle MSBuild node outlives the run.
+- `--slot <tag> --empty-slot` takes a slot without a cache (a true first build);
+  `wt-slot.js reset <tag>` empties the slot a tag holds.
 
 ## What stays in the project layer
 

@@ -12,7 +12,28 @@ documented in `kit.config.schema.json`). Installed into `<project>/.claude/hooks
 | `subagent-model-guard.js` | PreToolUse `Agent` | model per role, explicit model, no fork | closed |
 | `format.js` | PostToolUse `Edit\|Write\|MultiEdit` | runs the formatter only when the repo has a formatter config | never blocks |
 | `sync-memory.js` | Stop (also CLI: `--restore`, `--dry-run`, `--status`) | mirrors Claude's global memory into `paths.memoryMirror` | never blocks |
-| `test-hooks.js` | manual: `node .claude/hooks/test-hooks.js [filter]` | ~200 table-driven cases plus unit checks; exit 1 on any failure | - |
+| `test-hooks.js` | manual: `node .claude/hooks/test-hooks.js [filter]` | ~280 table-driven cases plus unit checks; exit 1 on any failure | - |
+| `probe.js` | manual: `node .claude/hooks/probe.js shell "<cmd>" \| edit <file> \| agent <type> [model] \| --batch <file>` (`--mode auto`, `--ps`) | prints what the installed hooks decide with the real config; runs nothing | - |
+
+## Unattended permission modes
+
+A hook's `ask` becomes a prompt only when someone is there to answer it. In the 2026-10-18
+image_matching dry-run a `git push` the guard asked about ran without any prompt in `auto`
+mode. Every `ask` therefore carries a category, and when the hook input's `permission_mode`
+is in `hooks.autoMode.modes` (default `auto`, `bypassPermissions`) an ask whose category is in
+`hooks.autoMode.askToDeny` becomes a deny that tells the agent to ask the human in chat:
+
+| Category | Asked for | Denied in auto mode by default |
+|---|---|---|
+| `push` | `git push`, `--force-with-lease` | yes |
+| `envWrite` | `setx`, `SetEnvironmentVariable(.., User\|Machine)`, Environment registry keys | yes |
+| `askBeforeEdit` | Edit/Write or a shell write into `paths.askBeforeEdit` | yes |
+| `localOnlyDelete` | a delete inside `paths.localOnly` | yes |
+| `destructiveGit` | `reset --hard`, `clean`, `checkout --`, `restore`, `branch -D`, `rebase`, `--amend`, `stash drop`, ... | yes |
+| `remote`, `outsideDelete`, `unresolvedDelete`, `inPlaceEdit`, `killByName`, `kitConfig` | remote changes, deletes outside the project or of unresolvable targets, `sed -i`, kill by name, `kit.config.json` / `settings.json` edits | no (add them to the list to deny) |
+
+In the attended modes (`default`, `acceptEdits`, `plan`) nothing changes. The PowerShell twin
+(`hooks-powershell`) applies the same rule to its own asks.
 
 ## Decision protocol
 
@@ -29,6 +50,7 @@ stderr.
 | `git.identity`, `deniedEmails`, `forbiddenPhrases`, `push`, `forcePush`, `gitExe` | guard-shell |
 | `paths.readOnly`, `askBeforeEdit`, `localOnly`, `protectedDelete`, `memoryMirror`, `forbiddenTreeFiles`, `tempRoots` | guard-shell, guard-edit |
 | `processes.neverKill`, `neverLaunch` | guard-shell |
+| `hooks.autoMode.modes`, `askToDeny` | guard-shell, guard-edit (asks that become denies in unattended modes) |
 | `environment.persistentWrites`, `protectedVars` | guard-shell (setx, `[Environment]::SetEnvironmentVariable(.., User\|Machine)`, HKCU/HKLM Environment registry writes; `$env:X` is free) |
 | `encoding.asciiExtensions`, `asciiExempt`, `asciiRepoMarkdown`, `codePage` | guard-edit, guard-shell (PowerShell writes), format |
 | `models.worker`, `reviewer`, `forceAll`, `allowFork` | subagent-model-guard |

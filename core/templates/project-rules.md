@@ -55,7 +55,9 @@
 - Framework and layout: <GoogleTest in tests/unit|synthetic|regression | QtTest one project
   per suite under tests/<name>/ | ...>.
 - Required kinds of tests for a `full` task: <unit + regression | contract suite unchanged>.
-- Tolerances, goldens, baselines: <...; regenerate only with `--update-golden` and a reason>.
+- Tolerances, goldens, baselines: <table: quantity | limit | where it is checked, e.g.
+  position 0.5 px, angle 0.1 deg, score 0.01; golden dir; regenerate only with
+  `--update-golden` and a reason>.
 - Suites that need hardware and how they skip: <...>.
 
 ## Anything else non-negotiable

@@ -190,9 +190,9 @@ Ghi chú: Claude Code chỉ tự động đọc `.claude/rules/`, `.claude/agent
 ## 6. Tiến độ hiện tại và việc tiếp theo
 
 Tình trạng repo `claude-kit` (`main` = `d68394b`): 8 commit sau bản khởi tạo; bộ test
-`node core/hooks/test-hooks.js` 265/265, `packs/controller-kernel/hooks/test-kernel-gates.js`,
+`node core/hooks/test-hooks.js` 286/286, `packs/controller-kernel/hooks/test-kernel-gates.js`,
 `packs/work-package/hooks/test-wt-guard.js` 18/18, `packs/docs-spec-driven/tools/test-docs-gate.js`,
-`packs/hooks-powershell/hooks/test-hooks.ps1` 87/87 (Windows PowerShell 5.1.26100) đều 0 fail. Cài thử 5 pack cùng lúc
+`packs/hooks-powershell/hooks/test-hooks.ps1` 96/96 (Windows PowerShell 5.1.26100) đều 0 fail. Cài thử 5 pack cùng lúc
 vào thư mục tạm và `--update` lại đều đúng layout.
 
 Bài học từ dry-run ncr_picking đã vào kit:
@@ -213,6 +213,29 @@ Bài học từ dry-run ncr_picking đã vào kit:
   trường build của mọi tool trên máy; tên trong `environment.protectedVars` (vd `BINPICK_*`) → deny; tên
   không đọc được → ask; `$env:X` (process scope) vẫn tự do. Cả bản Node lẫn bản PowerShell (K19, đã sửa,
   phát hiện khi retrofit bin-picking: rule cấm đổi `BINPICK_*` nhưng hook không chặn).
+- Dry-run image_matching (2026-10-19, K20–K31), đã sửa:
+  - K20 (nghiêm trọng): ở chế độ `auto` một `ask` của hook không hiện prompt, `git push` đã chạy. Mỗi
+    `ask` giờ có category; khi `permission_mode` thuộc `hooks.autoMode.modes` (mặc định `auto`,
+    `bypassPermissions`), các category trong `hooks.autoMode.askToDeny` (push, envWrite, askBeforeEdit,
+    localOnlyDelete, destructiveGit) thành deny kèm lời dặn hỏi người trong chat. Cả Node lẫn PowerShell.
+  - K21: `core/hooks/probe.js` cho xem quyết định của hook với config thật mà không chạy lệnh (`--batch`,
+    `--mode auto`); rule 04 và PORTING cấm "thử ask bằng lệnh thật".
+  - K22/K28: `build.js` ghi log từng bước vào `<scratch>/build-logs/`, in thời gian, số warning/error,
+    tổng ctest; `--fresh`; dừng khi cache thuộc cây khác; `MSBUILDDISABLENODEREUSE=1`; `build`/`all` tự
+    configure khi input CMake mới hơn cache hoặc tập file nguồn đổi; `packConfig.suppressRegeneration`
+    cho race `generate.stamp` của VS generator.
+  - K23: `configureArgs` nhận `$env{NAME}` và `${sourceDir}`; skill `cmake-build` sửa lời "luôn từ biến
+    môi trường".
+  - K24: `wt-slot.js acquire --empty`, `reset <tag>`, `status` báo slot có cache hay rỗng;
+    `build.js --empty-slot`.
+  - K25: rule `cpp-testing` không còn giả định `tests/synthetic/`; template rules có bảng tolerance.
+  - K26: thông báo ASCII cho Markdown nêu đúng `encoding.asciiRepoMarkdown`.
+  - K27: reviewer giữ Bash nhưng ghi rõ read-only là hợp đồng, liệt kê lệnh được và cấm.
+  - K29: `install.js` cảnh báo một path nằm ở hai danh sách mâu thuẫn và `configureArgs` ghi cứng path
+    project; PORTING dặn đánh dấu "unverified" số liệu chép từ ghi chú cũ.
+  - K30: WORKFLOW / team-leader: sau session limit, kiểm tra process, slot, sub agent và dừng agent thừa trước.
+  - Không cần sửa: report mục 4 (wt-slot mới không hồi quy) và mục 13 (`sync-memory` đã so tên thư mục
+    không phân biệt hoa thường).
 - `test-hooks.ps1` chạy xanh trên Windows PowerShell 5.1: 5.1 biến stderr của tiến trình con thành
   `NativeCommandError` khi stream bị redirect, harness đặt `ErrorActionPreference = Stop` nên chết ở case
   fail-open. Harness hạ xuống `Continue` quanh mỗi lời gọi hook; bản thân ba hook không bị ảnh hưởng

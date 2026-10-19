@@ -266,13 +266,13 @@ class Guard {
     const o = opt || {};
     for (const t0 of targets) {
       const r = P.resolveTarget(t0, cur);
-      if (r.err) { this.d.ask('delete of a target that ' + r.err + '; the guard cannot check where it points.'); continue; }
+      if (r.err) { this.d.ask('delete of a target that ' + r.err + '; the guard cannot check where it points.', 'unresolvedDelete'); continue; }
       const abs = r.abs;
       if (P.inTemp(abs, this.temps)) continue;
       if (!P.under(abs, this.root)) {
         this.d.ask(r.relative
           ? 'delete with a relative target (' + t0 + ') while the working directory is outside the project (' + cur + ').'
-          : 'delete outside the project folder (' + t0 + '). Outside the project nothing is deleted without the human\'s yes.');
+          : 'delete outside the project folder (' + t0 + '). Outside the project nothing is deleted without the human\'s yes.', 'outsideDelete');
         continue;
       }
       if (abs === this.root && !o.ancestorOk) { this.d.deny('delete of the project root itself (' + t0 + ').'); continue; }
@@ -290,7 +290,7 @@ class Guard {
         continue;
       }
       const lo = P.matchAny(abs, this.root, this.cfg.paths.localOnly);
-      if (lo) this.d.ask('delete of local-only data git cannot restore ("' + lo + '": ' + t0 + '). Confirm with the human first.');
+      if (lo) this.d.ask('delete of local-only data git cannot restore ("' + lo + '": ' + t0 + '). Confirm with the human first.', 'localOnlyDelete');
     }
     return null;
   }
@@ -309,7 +309,7 @@ class Guard {
       return;
     }
     const ab = P.matchAny(abs, this.root, this.cfg.paths.askBeforeEdit);
-    if (ab) this.d.ask(verb + ' into "' + ab + '" (' + t0 + '), which asks before any edit.');
+    if (ab) this.d.ask(verb + ' into "' + ab + '" (' + t0 + '), which asks before any edit.', 'askBeforeEdit');
     if (encodes && this.ps && this.cfg.encoding.codePage && P.asciiCovered(abs, this.root, this.cfg, { markdown: false })) {
       this.d.deny(verb + ' of a source file from PowerShell (' + t0 + ') on a ' + this.cfg.encoding.codePage +
         ' machine mangles UTF-8. Use the Edit/Write tools or [IO.File]::WriteAllText(path, text, (New-Object Text.UTF8Encoding $false)).');
@@ -329,7 +329,7 @@ class Guard {
     if (P.matchAny(abs, this.root, this.buildDirs)) return;
     if (P.matchAny(abs, this.root, this.cfg.paths.readOnly) || this.kitAbs.some((k) => P.under(abs, k))) return;
     this.d.ask(verb + ' rewrites ' + (this.relOf(abs) || t0) + ' in place through the shell: CRLF becomes LF and the bytes ' +
-      'are re-encoded. Use the Edit tool for project files, or confirm with the human.');
+      'are re-encoded. Use the Edit tool for project files, or confirm with the human.', 'inPlaceEdit');
   }
 
   parseDeleteArgs(name, args) {
@@ -381,7 +381,7 @@ class Guard {
 
   codeCheck(code, cur) {
     if (!CODE_DELETE.test(code)) return;
-    if (CODE_DYNAMIC.test(code)) { this.d.ask('inline code deletes a path computed at run time; the guard cannot check it.'); return; }
+    if (CODE_DYNAMIC.test(code)) { this.d.ask('inline code deletes a path computed at run time; the guard cannot check it.', 'unresolvedDelete'); return; }
     const stripped = code
       .replace(/require\s*\(\s*(['"`])[^'"`]*\1\s*\)/g, ' ')
       .replace(/\bimport\s+[\w\s,{}*]+\s+from\s+(['"`])[^'"`]*\1/g, ' ');
@@ -392,7 +392,7 @@ class Guard {
       const v = m[2].replace(/\\\\/g, '\\');
       if (v && !CODE_NONPATH.has(v)) lits.push(v);
     }
-    if (lits.length === 0) { this.d.ask('inline code deletes a path that is not a literal; the guard cannot check it.'); return; }
+    if (lits.length === 0) { this.d.ask('inline code deletes a path that is not a literal; the guard cannot check it.', 'unresolvedDelete'); return; }
     this.checkDeleteTargets(lits, cur, { ancestorOk: false });
   }
 
@@ -441,7 +441,7 @@ class Guard {
       }
       if (dry) return;
       if (ign) { this.d.deny('git clean -x/-X deletes ignored files, including the ignored .claude/ (use -fd, or -n first).'); return; }
-      this.d.ask('git clean deletes untracked files; destructive git needs the human\'s explicit permission.');
+      this.d.ask('git clean deletes untracked files; destructive git needs the human\'s explicit permission.', 'destructiveGit');
       this.checkDeleteTargets(targets.length ? targets : ['.'], dir, { ancestorOk: true });
       return;
     }
@@ -453,15 +453,15 @@ class Guard {
       if (force || plus) { this.d.deny('force push without --force-with-lease (or a +refspec). A force push needs the human\'s explicit request, and then --force-with-lease.'); return; }
       if (lease) {
         if (g.forcePush === 'deny') this.d.deny('force push is not allowed in this project (git.forcePush = deny).');
-        else this.d.ask('git push --force-with-lease: only on the human\'s explicit request in this conversation.');
+        else this.d.ask('git push --force-with-lease: only on the human\'s explicit request in this conversation.', 'push');
         return;
       }
-      this.d.ask('git push: push only when the human asked for it in this conversation.');
+      this.d.ask('git push: push only when the human asked for it in this conversation.', 'push');
       return;
     }
     if (sub === 'remote' && /\s(add|set-url|remove|rm|rename)\s/.test(restStr)) {
       if (g.push === 'deny') this.d.deny('this repository is local-only (git.push = deny): never add or change a remote.');
-      else this.d.ask('changing a git remote; confirm with the human.');
+      else this.d.ask('changing a git remote; confirm with the human.', 'remote');
       return;
     }
     if (sub === 'add' && rest.some((a) => /^(-A|--all|-u|--update|\.|\*|:\/)$/.test(a) || /^-[a-zA-Z]*[Au][a-zA-Z]*$/.test(a))) {
@@ -470,7 +470,7 @@ class Guard {
     }
     if (sub === 'commit') {
       if (rest.some((a) => a === '--all' || /^-[a-zA-Z]*a[a-zA-Z]*$/.test(a))) this.d.deny('git commit -a stages every tracked change. Stage by path, then commit.');
-      if (rest.includes('--amend')) this.d.ask('git commit --amend rewrites the last commit; prefer a new commit. Needs the human\'s permission.');
+      if (rest.includes('--amend')) this.d.ask('git commit --amend rewrites the last commit; prefer a new commit. Needs the human\'s permission.', 'destructiveGit');
       return;
     }
     if (sub === 'config') {
@@ -501,7 +501,7 @@ class Guard {
       [sub === 'gc' && rest.some((a) => /^--prune/.test(a)), 'git gc --prune removes unreachable objects'],
     ];
     for (const [hit, why] of destroy) {
-      if (hit) { this.d.ask(why + '. Destructive git commands need the human\'s explicit permission.'); return; }
+      if (hit) { this.d.ask(why + '. Destructive git commands need the human\'s explicit permission.', 'destructiveGit'); return; }
     }
   }
 
@@ -532,7 +532,7 @@ class Guard {
         const covered = this.protectedAbs.find((p) => P.under(p, r.abs) && p !== r.abs);
         if (covered) {
           this.d.ask('find -delete / -exec rm walks a tree that contains a protected location (' + this.relOf(covered) +
-            '); narrow the start directory or exclude it with -path ... -prune.');
+            '); narrow the start directory or exclude it with -path ... -prune.', 'unresolvedDelete');
           break;
         }
       }
@@ -553,7 +553,7 @@ class Guard {
     else if (name === 'kill') byName = args.filter((a) => !/^-/.test(a)).some((a) => !/^%?\d+$/.test(a));
     else byName = !/(^|\s)-id\b/.test(lower) && !/\$_\.id|\.id\b/.test(lower) && !(c.piped && this.lastGetProcessById);
     if (byName) {
-      this.d.ask('killing processes by name can hit another project\'s processes. Kill only processes this session started, by PID.');
+      this.d.ask('killing processes by name can hit another project\'s processes. Kill only processes this session started, by PID.', 'killByName');
     }
   }
 
@@ -635,13 +635,13 @@ class Guard {
       return;
     }
     if (!varName) {
-      this.d.ask(how + ' writes ' + where + '-scope environment variable whose name the guard cannot read; a persistent variable outlives the session. Confirm with the human.');
+      this.d.ask(how + ' writes ' + where + '-scope environment variable whose name the guard cannot read; a persistent variable outlives the session. Confirm with the human.', 'envWrite');
       return;
     }
     const mode = env.persistentWrites || 'ask';
     if (mode === 'allow') return;
     const text = how + ' writes the ' + where + '-scope environment variable ' + varName + ', which outlives this session and changes the build environment of every tool on the machine (environment.persistentWrites). Set it for this process only ($env:NAME) or confirm with the human.';
-    if (mode === 'deny') this.d.deny(text); else this.d.ask(text);
+    if (mode === 'deny') this.d.deny(text); else this.d.ask(text, 'envWrite');
   }
 
   command(c) {
@@ -666,8 +666,8 @@ class Guard {
 
     if (RM_VERBS.has(name)) {
       const targets = this.parseDeleteArgs(name, args);
-      if (c.xargs) { this.d.ask('delete takes its targets from xargs; the guard cannot check them.'); return null; }
-      if (targets.length === 0) { if (c.piped) this.d.ask('delete takes its targets from a pipeline; the guard cannot check them.'); return null; }
+      if (c.xargs) { this.d.ask('delete takes its targets from xargs; the guard cannot check them.', 'unresolvedDelete'); return null; }
+      if (targets.length === 0) { if (c.piped) this.d.ask('delete takes its targets from a pipeline; the guard cannot check them.', 'unresolvedDelete'); return null; }
       this.checkDeleteTargets(targets, c.cur, { ancestorOk: false });
       return null;
     }
@@ -747,6 +747,7 @@ function main(input, d) {
       code: (code, cur) => g.codeCheck(code, cur),
     },
   });
+  d.escalate(input, cfg);
 }
 
 module.exports = { main };

@@ -90,3 +90,11 @@ A new session recovers state by reading, in order: `.claude/CLAUDE.md` ->
 `.claude/core/roles/team-leader.md` -> `.claude/project/*.md` -> `.claude/docs/decisions.md`
 and `lessons.md` -> `.claude/tasks/active/*.md`. The first empty section in an active task
 file is where work resumes.
+
+After a session limit or a crash, check what is still running **before** resuming: a sub
+agent cut by the limit resumes on its own after the reset and starts its builds again (seen
+2026-10-19). List the processes (`tasklist` / `ps`: `cl`, `link`, `MSBuild`, `ninja`, `cmake`,
+`ctest`, the project's executables), the build slots (`wt-slot.js status`) and the sub agents
+still reporting; stop the redundant agents first (by task id, then their process tree by PID,
+only what this session started), release their slots, then continue from the task file. A
+result that lands after the leader moved on is evidence to read, not work to adopt.

@@ -47,8 +47,11 @@ function Run-Hook([string]$hook, [string]$json) {
     if (-not $text) { return 'allow' }
     try { return (ConvertFrom-Json $text).hookSpecificOutput.permissionDecision } catch { return 'bad:' + $text }
 }
-function ShellCase([string]$cmd, [string]$expect, [string]$tool = 'Bash') {
-    return @{ hook = 'guard-shell.ps1'; json = (ConvertTo-Json @{ tool_name = $tool; tool_input = @{ command = $cmd }; cwd = $P } -Compress); expect = $expect; label = $cmd }
+function ShellCase([string]$cmd, [string]$expect, [string]$tool = 'Bash', [string]$mode = '') {
+    $in = @{ tool_name = $tool; tool_input = @{ command = $cmd }; cwd = $P }
+    $label = $cmd
+    if ($mode) { $in.permission_mode = $mode; $label = '[' + $mode + '] ' + $cmd }
+    return @{ hook = 'guard-shell.ps1'; json = (ConvertTo-Json $in -Compress); expect = $expect; label = $label }
 }
 function AgentCase($ti, [string]$expect) {
     $json = if ($null -eq $ti) { 'null' } else { ConvertTo-Json @{ tool_name = 'Agent'; tool_input = $ti; cwd = $P } -Compress }
@@ -109,6 +112,16 @@ $cases = @(
     (ShellCase 'echo x > build/log.txt' 'allow' 'PowerShell'),
     (ShellCase 'Get-Content src/a.cpp' 'allow' 'PowerShell'),
     (ShellCase 'echo x > src/a.cpp' 'allow'),
+    # unattended permission modes: listed asks become denies
+    (ShellCase 'git push origin main' 'deny' 'Bash' 'auto'),
+    (ShellCase 'git push origin main' 'deny' 'Bash' 'bypassPermissions'),
+    (ShellCase 'git push origin main' 'ask' 'Bash' 'default'),
+    (ShellCase 'git reset --hard HEAD~1' 'deny' 'Bash' 'auto'),
+    (ShellCase 'rm -rf .wt/slot1' 'deny' 'Bash' 'auto'),
+    (ShellCase 'setx FOO_DIR C:/x' 'deny' 'Bash' 'auto'),
+    (ShellCase 'taskkill /IM other_tests.exe /F' 'ask' 'Bash' 'auto'),
+    (ShellCase 'git remote add up https://example.com/x.git' 'ask' 'Bash' 'auto'),
+    (ShellCase 'git status' 'allow' 'Bash' 'auto'),
     # persistent environment variables (K19)
     (ShellCase '[Environment]::SetEnvironmentVariable("FOO_DIR", "C:/x", "User")' 'ask' 'PowerShell'),
     (ShellCase '[System.Environment]::SetEnvironmentVariable(''FOO_DIR'', ''C:/x'', [EnvironmentVariableTarget]::Machine)' 'ask' 'PowerShell'),

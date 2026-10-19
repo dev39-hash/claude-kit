@@ -557,6 +557,51 @@
           "description": "Safety guards fail open (allow + stderr note) on their own errors. The model guard always fails closed.",
           "default": "open"
         },
+        "autoMode": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Permission modes in which a hook 'ask' does not reach the human (observed 2026-10-18: git push ran in auto mode without a prompt). In those modes an ask of a listed category becomes a deny that tells the agent to ask the human in chat.",
+          "properties": {
+            "modes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Values of the hook input's permission_mode treated as unattended (default, plan, acceptEdits, auto, bypassPermissions, dontAsk).",
+              "default": [
+                "auto",
+                "bypassPermissions"
+              ]
+            },
+            "askToDeny": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "push",
+                  "remote",
+                  "envWrite",
+                  "askBeforeEdit",
+                  "localOnlyDelete",
+                  "outsideDelete",
+                  "unresolvedDelete",
+                  "destructiveGit",
+                  "inPlaceEdit",
+                  "killByName",
+                  "kitConfig"
+                ]
+              },
+              "description": "Ask categories that become a deny in those modes.",
+              "default": [
+                "push",
+                "envWrite",
+                "askBeforeEdit",
+                "localOnlyDelete",
+                "destructiveGit"
+              ]
+            }
+          }
+        },
         "timeoutSeconds": {
           "type": "object",
           "additionalProperties": false,

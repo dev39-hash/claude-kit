@@ -58,7 +58,7 @@ function main(input, d) {
       'would overwrite it. Change the kit and re-run install.js --update; project-specific rules go to .claude/project/rules.md.');
   }
   if (rel === '.claude/settings.json' || rel === '.claude/kit.config.json') {
-    d.ask(target + ' configures the hooks and the kit; confirm the change with the human first.');
+    d.ask(target + ' configures the hooks and the kit; confirm the change with the human first.', 'kitConfig');
   }
   const forbidden = (cfg.paths.forbiddenTreeFiles || []).map((n) => String(n).toLowerCase());
   if (!inClaude && forbidden.includes(P.basename(abs).toLowerCase())) {
@@ -66,7 +66,7 @@ function main(input, d) {
       '(it holds user documentation only). Instructions live in .claude/CLAUDE.md and .claude/rules/; module docs are README.md.');
   }
   const ab = P.matchAny(abs, root, cfg.paths.askBeforeEdit);
-  if (ab) d.ask(target + ' is under "' + ab + '" (paths.askBeforeEdit); edit it only when the task says so.');
+  if (ab) d.ask(target + ' is under "' + ab + '" (paths.askBeforeEdit); edit it only when the task says so.', 'askBeforeEdit');
 
   if (P.asciiCovered(abs, root, cfg)) {
     const texts = [];
@@ -78,12 +78,14 @@ function main(input, d) {
       const m = s.match(/[^\x00-\x7F]/);
       if (!m) continue;
       const line = s.split('\n').find((l) => l.includes(m[0])) || '';
-      d.deny(target + ': this file is ASCII only (encoding.asciiExtensions; MSVC C4819 / code-page machines). Found U+' +
+      const why = /\.(md|markdown)$/i.test(abs) ? 'encoding.asciiRepoMarkdown: tracked Markdown is ASCII' : 'encoding.asciiExtensions; MSVC C4819 / code-page machines';
+      d.deny(target + ': this file is ASCII only (' + why + '). Found U+' +
         m[0].codePointAt(0).toString(16).toUpperCase().padStart(4, '0') + ' in: ' + line.trim().slice(0, 120) +
         '. Write -- for a dash, -> for an arrow, x, deg, +/-, ...; a character the program shows goes in as an escape.');
       break;
     }
   }
+  d.escalate(input, cfg);
 }
 
 module.exports = { main };
