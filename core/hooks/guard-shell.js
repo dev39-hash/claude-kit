@@ -261,6 +261,28 @@ class Guard {
 
   relOf(abs) { return P.rel(abs, this.root); }
 
+  // A move is a delete of its source only when the data leaves its protected place. Moving a
+  // file inside the same paths.localOnly / paths.protectedDelete roots (closing a task:
+  // .claude/tasks/active/T-1.md -> .claude/tasks/done/, seen denied in mc_protocol and
+  // controller-kernel) keeps it where git cannot restore it anyway, so it is not judged as a
+  // delete. Not for: kit files and the memory mirror, read-only paths, globs, unresolvable
+  // targets, a source with a protected location below it, or a destination outside any root
+  // the source is in.
+  moveStaysInside(srcT, destT, cur) {
+    const s = P.resolveTarget(srcT, cur);
+    const d = P.resolveTarget(destT, cur);
+    if (s.err || d.err || s.glob || d.glob) return false;
+    const src = s.abs, dst = d.abs;
+    if (!P.under(src, this.root) || !P.under(dst, this.root)) return false;
+    if (this.kitAbs.some((k) => P.under(src, k) || P.under(dst, k))) return false;
+    if (P.matchAny(src, this.root, this.cfg.paths.readOnly)) return false;
+    if (this.protectedAbs.some((p) => P.under(p, src) && p !== src)) return false;
+    const roots = [].concat(this.cfg.paths.localOnly || [], this.cfg.paths.protectedDelete || [])
+      .filter((p) => P.matchAny(src, this.root, [p]));
+    if (!roots.length) return false;
+    return roots.every((p) => P.matchAny(dst, this.root, [p]));
+  }
+
   // reason string if a resolved delete target is not allowed, else null; also records ask
   checkDeleteTargets(targets, cur, opt) {
     const o = opt || {};
@@ -548,7 +570,12 @@ class Guard {
     }
     const lower = joined.toLowerCase();
     let byName;
-    if (name === 'taskkill' || name === 'tskill') byName = /(^|\s)\/im(\s|$)/.test(lower) || (name === 'tskill' && !/^\s*\d+/.test(lower));
+    // taskkill by image name: /IM x, //IM (Git Bash), -IM, /IM:x, and a filter on the image name
+    // (/FI "IMAGENAME eq x", also "==" and //FI); a PID filter (/FI "PID eq 1234") is by PID.
+    if (name === 'taskkill' || name === 'tskill') {
+      byName = /(^|\s)(\/\/?|-)im(\s|:|$)/.test(lower) || (name === 'tskill' && !/^\s*\d+/.test(lower)) ||
+        (/(^|\s)(\/\/?|-)fi(\s|:|$)/.test(lower) && /imagename\s*(eq|==|ne|!=)/.test(lower));
+    }
     else if (name === 'pkill' || name === 'killall') byName = true;
     else if (name === 'kill') byName = args.filter((a) => !/^-/.test(a)).some((a) => !/^%?\d+$/.test(a));
     else byName = !/(^|\s)-id\b/.test(lower) && !/\$_\.id|\.id\b/.test(lower) && !(c.piped && this.lastGetProcessById);
@@ -687,7 +714,8 @@ class Guard {
       for (const t of dest) this.checkWriteTarget(t, c.cur, name);
       if (MOVE_VERBS.has(name)) {
         const srcs = p.path.length ? p.path : p.positionals.slice(0, Math.max(0, p.positionals.length - 1));
-        this.checkDeleteTargets(srcs, c.cur, { ancestorOk: false });
+        const moved = srcs.filter((s) => !(dest.length === 1 && this.moveStaysInside(s, dest[0], c.cur)));
+        this.checkDeleteTargets(moved, c.cur, { ancestorOk: false });
       }
       return null;
     }

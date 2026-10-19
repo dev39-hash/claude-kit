@@ -190,7 +190,7 @@ Ghi chú: Claude Code chỉ tự động đọc `.claude/rules/`, `.claude/agent
 ## 6. Tiến độ hiện tại và việc tiếp theo
 
 Tình trạng repo `claude-kit` (`main` = `d68394b`): 8 commit sau bản khởi tạo; bộ test
-`node core/hooks/test-hooks.js` 286/286, `packs/controller-kernel/hooks/test-kernel-gates.js`,
+`node core/hooks/test-hooks.js` 304/304, `packs/controller-kernel/hooks/test-kernel-gates.js`,
 `packs/work-package/hooks/test-wt-guard.js` 18/18, `packs/docs-spec-driven/tools/test-docs-gate.js`,
 `packs/hooks-powershell/hooks/test-hooks.ps1` 96/96 (Windows PowerShell 5.1.26100) đều 0 fail. Cài thử 5 pack cùng lúc
 vào thư mục tạm và `--update` lại đều đúng layout.
@@ -213,8 +213,10 @@ Bài học từ dry-run ncr_picking đã vào kit:
   trường build của mọi tool trên máy; tên trong `environment.protectedVars` (vd `BINPICK_*`) → deny; tên
   không đọc được → ask; `$env:X` (process scope) vẫn tự do. Cả bản Node lẫn bản PowerShell (K19, đã sửa,
   phát hiện khi retrofit bin-picking: rule cấm đổi `BINPICK_*` nhưng hook không chặn).
-- Dry-run image_matching (2026-10-19, K20–K31), đã sửa:
-  - K20 (nghiêm trọng): ở chế độ `auto` một `ask` của hook không hiện prompt, `git push` đã chạy. Mỗi
+- Dry-run image_matching (2026-10-19, K20–K30), đã sửa:
+  - K20 (nghiêm trọng): ở chế độ `auto` một `ask` của hook không giữ được vai trò cổng: ở image_matching
+    `git push` đã chạy mà không ai thấy dialog; ở mc_protocol dialog có hiện và được duyệt bằng một click,
+    ngoài chat (chỉnh lại 2026-10-19 theo report mc_protocol). Mỗi
     `ask` giờ có category; khi `permission_mode` thuộc `hooks.autoMode.modes` (mặc định `auto`,
     `bypassPermissions`), các category trong `hooks.autoMode.askToDeny` (push, envWrite, askBeforeEdit,
     localOnlyDelete, destructiveGit) thành deny kèm lời dặn hỏi người trong chat. Cả Node lẫn PowerShell.
@@ -236,6 +238,22 @@ Bài học từ dry-run ncr_picking đã vào kit:
   - K30: WORKFLOW / team-leader: sau session limit, kiểm tra process, slot, sub agent và dừng agent thừa trước.
   - Không cần sửa: report mục 4 (wt-slot mới không hồi quy) và mục 13 (`sync-memory` đã so tên thư mục
     không phân biệt hoa thường).
+- Dry-run mc_protocol (2026-10-19), đã sửa:
+  - K31 (nặng): `install.js --update` lọc hook theo cả entry nên xóa hook riêng của project khi nó nằm chung
+    matcher với hook kit (`deny-kill-build-tools.js` của mc_protocol). Giờ lọc từng hook, gộp hook project vào
+    entry cùng matcher, báo "kept project hook"; chạy `--update` hai lần không nhân đôi.
+  - K32 (hồi quy của K20): đóng task bằng `mv .claude/tasks/active/T.md .claude/tasks/done/` bị coi là xóa dữ
+    liệu `localOnly` nên bị deny ở chế độ auto (mc_protocol K-003, controller-kernel T-001). Move nằm trong cùng
+    root `localOnly`/`protectedDelete` không còn tính là xóa; ra khỏi root, file kit, mirror, readOnly, glob vẫn như cũ.
+  - K33: `taskkill /FI "IMAGENAME eq x"` (và `//FI`, `//IM`, `-IM`) trước đây lọt qua như kill theo PID; giờ là kill
+    theo tên (ask, deny nếu thuộc `neverKill`).
+  - K34: `build.js build` đếm file được compile; build không compile gì in `NOTHING COMPILED (... not compile evidence)`.
+  - Lời giải thích của K20 sửa lại: ở auto mode `ask` là dialog một click ngoài chat, không phải "không tới người".
+    mc_protocol giữ `ask` theo phán quyết của owner (`hooks.autoMode.askToDeny: []`).
+  - Không phải lỗi kit hoặc đã hết hiệu lực: mục 4, 7, 8 (project đã chuyển task và record vào `.claude/`),
+    mục 9 (lỗi dữ liệu của retrofit, project đã sửa trong K-001), mục 10 (classifier của harness; `probe.js`
+    thay thế), mục 11 (scratch giờ chứa log của `build.js`). Mục 3 (kill theo tên tool build là deny) và mục 5
+    (khái niệm batch) để project tự giữ: hook riêng của mc_protocol và quy tắc trong `project/rules.md`.
 - `test-hooks.ps1` chạy xanh trên Windows PowerShell 5.1: 5.1 biến stderr của tiến trình con thành
   `NativeCommandError` khi stream bị redirect, harness đặt `ErrorActionPreference = Stop` nên chết ở case
   fail-open. Harness hạ xuống `Continue` quanh mỗi lời gọi hook; bản thân ba hook không bị ảnh hưởng

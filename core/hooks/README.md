@@ -12,16 +12,19 @@ documented in `kit.config.schema.json`). Installed into `<project>/.claude/hooks
 | `subagent-model-guard.js` | PreToolUse `Agent` | model per role, explicit model, no fork | closed |
 | `format.js` | PostToolUse `Edit\|Write\|MultiEdit` | runs the formatter only when the repo has a formatter config | never blocks |
 | `sync-memory.js` | Stop (also CLI: `--restore`, `--dry-run`, `--status`) | mirrors Claude's global memory into `paths.memoryMirror` | never blocks |
-| `test-hooks.js` | manual: `node .claude/hooks/test-hooks.js [filter]` | ~280 table-driven cases plus unit checks; exit 1 on any failure | - |
+| `test-hooks.js` | manual: `node .claude/hooks/test-hooks.js [filter]` | ~300 table-driven cases plus unit checks; exit 1 on any failure | - |
 | `probe.js` | manual: `node .claude/hooks/probe.js shell "<cmd>" \| edit <file> \| agent <type> [model] \| --batch <file>` (`--mode auto`, `--ps`) | prints what the installed hooks decide with the real config; runs nothing | - |
 
 ## Unattended permission modes
 
-A hook's `ask` becomes a prompt only when someone is there to answer it. In the 2026-10-18
-image_matching dry-run a `git push` the guard asked about ran without any prompt in `auto`
-mode. Every `ask` therefore carries a category, and when the hook input's `permission_mode`
-is in `hooks.autoMode.modes` (default `auto`, `bypassPermissions`) an ask whose category is in
-`hooks.autoMode.askToDeny` becomes a deny that tells the agent to ask the human in chat:
+A hook's `ask` is a permission dialog outside the chat. In the 2026-10-18 dry-runs it did not
+work as a gate in `auto` mode: in image_matching a `git push` the guard asked about ran and
+nobody noticed a dialog; in mc_protocol the dialog showed and was approved by one click, with
+nothing in the chat. Every `ask` therefore carries a category, and when the hook input's
+`permission_mode` is in `hooks.autoMode.modes` (default `auto`, `bypassPermissions`) an ask
+whose category is in `hooks.autoMode.askToDeny` becomes a deny that tells the agent to ask the
+human in chat. A project that wants the dialog to stay the gate sets `askToDeny` to `[]`
+(mc_protocol's owner ruled "keep ask"):
 
 | Category | Asked for | Denied in auto mode by default |
 |---|---|---|

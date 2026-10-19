@@ -78,6 +78,8 @@ cache or the set of source files changed (see below). A raw `cmake --build` does
   slot lock stays) and configures from scratch. Deleting only `CMakeCache.txt` is not enough
   after a move: MSBuild `*.lastbuildstate` keeps the old path (MSB8028).
 - Children run with `MSBUILDDISABLENODEREUSE=1`: no idle MSBuild node outlives the run.
+- The build summary counts compiled files; an up-to-date build says `NOTHING COMPILED (up to
+  date: not compile evidence ...)`, so "no work to do" is never reported as a compile.
 - `--slot <tag> --empty-slot` takes a slot without a cache (a true first build);
   `wt-slot.js reset <tag>` empties the slot a tag holds.
 

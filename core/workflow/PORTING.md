@@ -56,7 +56,8 @@ does steps 1-3; the rest is by hand.
    for every project-specific rule you put into `kit.config.json`. Check the real config with
    `node .claude/hooks/probe.js --batch <cases.txt>` (and `--mode auto` when the project runs
    in auto mode): it prints each decision and runs nothing. Never prove a deny or an ask by
-   running the real command: the guards fail open, and in auto mode an ask is not a prompt.
+   running the real command: the guards fail open, and in auto mode an ask is one dialog click
+   away from running.
 
 6. **Dry-run one small real task** end to end (plan -> gates -> done) before trusting the
    setup. Watch that each sub agent actually read the project layer: its section in the task

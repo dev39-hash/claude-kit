@@ -560,7 +560,7 @@
         "autoMode": {
           "type": "object",
           "additionalProperties": false,
-          "description": "Permission modes in which a hook 'ask' does not reach the human (observed 2026-10-18: git push ran in auto mode without a prompt). In those modes an ask of a listed category becomes a deny that tells the agent to ask the human in chat.",
+          "description": "Unattended permission modes. There a hook 'ask' is at most a one-click permission dialog outside the chat (2026-10-18: unnoticed before a git push ran in one project, shown and approved in another). In those modes an ask of a listed category becomes a deny that tells the agent to ask the human in chat; set askToDeny to [] to keep every ask a dialog.",
           "properties": {
             "modes": {
               "type": "array",

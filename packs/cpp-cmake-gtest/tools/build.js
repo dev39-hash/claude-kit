@@ -149,6 +149,9 @@ function findTool(tool) {
 // ---- running steps ---------------------------------------------------------------------------
 const WARN_RE = /(?:^|[\s:])warning\s+[A-Z]+\d+\s*:|:\s*warning\s*:|^CMake Warning/i;
 const ERR_RE = /(?:^|[\s:])(?:fatal\s+)?error\s+[A-Z]+\d+\s*:|:\s*(?:fatal\s+)?error\s*:|^CMake Error/i;
+// One line per compiled translation unit: MSVC / MSBuild echo the bare source name, Ninja and
+// Make print "Building CXX object" or "[n/m] Building ...".
+const COMPILE_RE = /^\s*[^\s:<>|"]+\.(?:c|cc|cpp|cxx|ixx|c\+\+)\s*$|Building (?:C|CXX) object|^\[\d+\/\d+\]\s+(?:Building|Compiling)/i;
 
 function stamp() {
   const d = new Date();
@@ -171,10 +174,11 @@ function runTool(exe, args, logFile) {
     let child;
     try { child = spawn(exe, args, { cwd: PROJECT, env }); } catch (err) {
       process.stderr.write('build.js: cannot run ' + exe + ': ' + err.message + '\n');
-      resolve({ code: 2, seconds: 0, warnings: 0, errors: 0, text: '' });
+      resolve({ code: 2, seconds: 0, warnings: 0, errors: 0, compiled: 0, text: '' });
       return;
     }
     const warn = new Set(), errs = new Set();
+    let compiled = 0;
     let text = '', pending = '';
     const scan = (s) => {
       pending += s;
@@ -183,6 +187,7 @@ function runTool(exe, args, logFile) {
       for (const l of parts) {
         const key = l.replace(/\s*\[[^\]]*\.(?:vcxproj|csproj|proj)\]\s*$/i, '').trim();
         if (ERR_RE.test(key)) errs.add(key); else if (WARN_RE.test(key)) warn.add(key);
+        if (COMPILE_RE.test(key)) compiled++;
       }
     };
     const onData = (stream) => (buf) => {
@@ -198,7 +203,7 @@ function runTool(exe, args, logFile) {
     child.on('close', (code) => {
       scan('\n');
       if (log !== null) { try { fs.closeSync(log); } catch (_) { /* ignore */ } }
-      resolve({ code: code === null ? 1 : code, seconds: (Date.now() - t0) / 1000, warnings: warn.size, errors: errs.size, text });
+      resolve({ code: code === null ? 1 : code, seconds: (Date.now() - t0) / 1000, warnings: warn.size, errors: errs.size, compiled, text });
     });
   });
 }
@@ -375,7 +380,14 @@ async function main() {
     if (r.code === 0) recordInputs(dir);
     return summary('configure', r);
   };
-  const build = async () => summary('build', await runTool(cmake, ['--build', dir, '--config', o.config, '--parallel'].concat(o.target ? ['--target', o.target] : []), logFor('build')));
+  // An up-to-date build ("no work to do") proves nothing about compiling: the summary says so,
+  // so a verification report cannot count it as compile evidence (mc_protocol dry-run).
+  const build = async () => {
+    const r = await runTool(cmake, ['--build', dir, '--config', o.config, '--parallel'].concat(o.target ? ['--target', o.target] : []), logFor('build'));
+    const extra = r.compiled ? r.compiled + ' file(s) compiled'
+      : 'NOTHING COMPILED (up to date: not compile evidence; use --fresh or touch a source)';
+    return summary('build', r, extra);
+  };
   const test = async () => {
     const r = await runTool(ctest, ['--test-dir', dir, '-C', o.config, '--output-on-failure'].concat(o.filter ? ['-R', o.filter] : []), logFor('test'));
     const m = r.text.match(/(\d+)% tests passed, (\d+) tests? failed out of (\d+)/);

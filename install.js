@@ -246,10 +246,26 @@ class Installer {
       const allow = new Set([].concat((existing.permissions && existing.permissions.allow) || [], tpl.permissions.allow));
       out.permissions = Object.assign({}, existing.permissions || {}, tpl.permissions, { allow: [...allow] });
       out.hooks = Object.assign({}, existing.hooks || {}, tpl.hooks);
+      // Keep every hook that is not kit-managed, hook by hook: a project hook registered in the
+      // same matcher entry as a kit hook (mc_protocol K-002 put its own guard next to
+      // guard-shell) used to be dropped with the whole entry. Kit hooks are the commands under
+      // .claude/hooks/; the template supplies them fresh.
+      const isKit = (h) => /\.claude\/hooks\//.test(String(h && h.command));
+      const kept = [];
       for (const ev of Object.keys(existing.hooks || {})) {
-        const custom = existing.hooks[ev].filter((entry) => !(entry.hooks || []).some((h) => /\.claude\/hooks\//.test(String(h.command))));
-        out.hooks[ev] = (tpl.hooks[ev] || []).concat(custom);
+        const merged = (tpl.hooks[ev] || []).map((e) => Object.assign({}, e, { hooks: (e.hooks || []).slice() }));
+        for (const entry of existing.hooks[ev] || []) {
+          const custom = (entry.hooks || []).filter((h) => !isKit(h));
+          if (!custom.length) continue;
+          let target = merged.find((e) => String(e.matcher || '') === String(entry.matcher || ''));
+          if (!target) { target = Object.assign({}, entry, { hooks: [] }); merged.push(target); }
+          for (const h of custom) {
+            if (!target.hooks.some((x) => String(x.command) === String(h.command))) { target.hooks.push(h); kept.push(ev + ' ' + (entry.matcher || '*') + ': ' + h.command); }
+          }
+        }
+        out.hooks[ev] = merged;
       }
+      for (const k of kept) this.note('kept project hook (' + k + ')');
     }
     this.writeFile(file, JSON.stringify(out, null, 2) + '\n', { overwrite: true });
   }

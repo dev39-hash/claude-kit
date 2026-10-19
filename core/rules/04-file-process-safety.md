@@ -5,12 +5,15 @@ Always loaded. Paths and process names live in `.claude/kit.config.json` (`paths
 
 - A hook is a guard rail, not permission: a command it allows can still need the human's yes.
   Never work around, weaken or disable a hook; when one blocks, ask the human.
-- A hook's "ask" is a human prompt only in an attended permission mode. In `auto` and
-  `bypassPermissions` (`hooks.autoMode.modes`) it would pass unseen, so the guards turn the
-  listed asks (`hooks.autoMode.askToDeny`: push, persistent environment writes,
-  `askBeforeEdit`, `localOnly` deletes, destructive git) into a deny. Then ask the human in
-  chat; they run the command or approve it outside that mode. Never run an "ask" command for
-  real to test a hook: `node .claude/hooks/probe.js` shows the decision without running it.
+- A hook's "ask" is a permission dialog outside the chat. In `auto` and `bypassPermissions`
+  (`hooks.autoMode.modes`) that dialog is easy to approve by reflex during a long run, so the
+  guards turn the listed asks (`hooks.autoMode.askToDeny`: push, persistent environment writes,
+  `askBeforeEdit`, `localOnly` deletes, destructive git) into a deny, unless the project set
+  the list to `[]` to keep the dialog. On a deny, ask the human in chat; they run the command
+  or approve it outside that mode. Never run an "ask" command for real to test a hook:
+  `node .claude/hooks/probe.js` shows the decision without running it.
+- Moving a file inside the same `localOnly` / `protectedDelete` root (closing a task:
+  `tasks/active/T-1.md` -> `tasks/done/`) is not a delete; moving it out of that root is.
 - **Deleting inside the project** is allowed when the task needs it, except
   `paths.protectedDelete` (`.git/`, the `.claude` folder itself, the kit files, the memory
   mirror) and `paths.readOnly`; `.claude/docs`, `tasks` and `scratch` may be cleaned.

@@ -35,7 +35,7 @@ $script:Asks = @()
 function Deny([string]$r) { $script:Denies += $r }
 # $c is the ask category (push, remote, destructiveGit, killByName, envWrite, localOnlyDelete);
 # in a permission mode listed in hooks.autoMode.modes an ask of a category in
-# hooks.autoMode.askToDeny becomes a deny (the ask would not reach the human).
+# hooks.autoMode.askToDeny becomes a deny (an ask there is only a one-click dialog outside the chat).
 $script:AskCats = @()
 function Ask([string]$r, [string]$c = '') { $script:Asks += $r; $script:AskCats += $c }
 function Esc([string]$s) { return [regex]::Escape($s) }
@@ -230,7 +230,7 @@ try {
         $keep = @()
         for ($i = 0; $i -lt $script:Asks.Count; $i++) {
             if ($amCats -contains $script:AskCats[$i]) {
-                Deny ($script:Asks[$i] + ' Permission mode is "' + $permMode + '": an ask would not reach the human, so it is denied (hooks.autoMode.askToDeny "' + $script:AskCats[$i] + '"). Ask the human in chat; they run the command themselves or approve it outside ' + $permMode + ' mode.')
+                Deny ($script:Asks[$i] + ' Permission mode is "' + $permMode + '": an ask here would only be a one-click dialog outside the chat, so it is denied (hooks.autoMode.askToDeny "' + $script:AskCats[$i] + '"). Ask the human in chat; they run the command themselves or approve it outside ' + $permMode + ' mode.')
             } else { $keep += $script:Asks[$i] }
         }
         $script:Asks = $keep
